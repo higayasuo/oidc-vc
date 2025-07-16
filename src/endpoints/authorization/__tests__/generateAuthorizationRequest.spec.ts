@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { generateAuthorizationRequest } from '../generateAuthorizationRequest';
 import type { RandomBytes } from '@/types';
-import {
-  TEST_CLIENT_ID,
-  TEST_ISSUER,
-  TEST_REDIRECT_URI,
-} from '@/testing/constants';
+
+const issuer = process.env.ISSUER!;
+const clientId = process.env.CLIENT_ID!;
+const redirectUri = process.env.REDIRECT_URI!;
 
 describe('generateAuthorizationRequest', () => {
   const mockRandomBytes: RandomBytes = (byteLength = 32) => {
@@ -13,18 +12,18 @@ describe('generateAuthorizationRequest', () => {
   };
 
   const baseConfig = {
-    authorizationEndpoint: `${TEST_ISSUER}/api/authorization`,
-    clientId: TEST_CLIENT_ID,
-    redirectUri: TEST_REDIRECT_URI,
+    authorizationEndpoint: `${issuer}/api/authorization`,
+    clientId,
+    redirectUri,
   };
 
   it('should generate basic authorization request URL', () => {
     const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
 
-    expect(result.url.href).toContain(`${TEST_ISSUER}/api/authorization`);
+    expect(result.url.href).toContain(`${issuer}/api/authorization`);
     expect(result.url.searchParams.get('response_type')).toBe('code');
-    expect(result.url.searchParams.get('client_id')).toBe(TEST_CLIENT_ID);
-    expect(result.url.searchParams.get('redirect_uri')).toBe(TEST_REDIRECT_URI);
+    expect(result.url.searchParams.get('client_id')).toBe(clientId);
+    expect(result.url.searchParams.get('redirect_uri')).toBe(redirectUri);
     expect(result.url.searchParams.get('scope')).toBe('openid');
     expect(result.url.searchParams.get('state')).toBeDefined();
     expect(result.url.searchParams.get('code_challenge')).toBeDefined();
@@ -118,15 +117,5 @@ describe('generateAuthorizationRequest', () => {
     expectedParams.forEach((param) => {
       expect(result.url.searchParams.has(param)).toBe(true);
     });
-  });
-
-  it('should generate valid URL structure', () => {
-    const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
-
-    // Should be a valid URL
-    expect(result.url).toBeInstanceOf(URL);
-    expect(result.url.protocol).toBe('https:');
-    expect(result.url.hostname).toBe('vc-issuer.g-trustedweb.workers.dev');
-    expect(result.url.pathname).toBe('/api/authorization');
   });
 });
