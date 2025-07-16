@@ -19,6 +19,7 @@ import { fetchOpenIdConfiguration } from '../src/endpoints/openid-configuration'
 import { generateAuthorizationRequest } from '../src/endpoints/authorization';
 import { createInterface } from 'node:readline';
 import { randomBytes as nodeRandomBytes } from 'crypto';
+import { config } from 'dotenv';
 import type { RandomBytes } from '../src/types';
 
 // Adapter: Node.js randomBytes to Uint8Array for RandomBytes type
@@ -37,6 +38,35 @@ const question = (query: string): Promise<string> => {
   return new Promise((resolve) => {
     rl.question(query, resolve);
   });
+};
+
+/**
+ * Loads environment variables from .env.test file using dotenv
+ */
+const loadEnvTest = (): Record<string, string> => {
+  try {
+    const result = config({ path: '.env.test' });
+    if (result.error) {
+      console.warn('⚠️  Warning: Could not load .env.test file:', result.error);
+      return {};
+    }
+
+    // Return the loaded environment variables
+    return result.parsed || {};
+  } catch (error) {
+    console.warn('⚠️  Warning: Could not read .env.test file:', error);
+    return {};
+  }
+};
+
+/**
+ * Gets default value for a parameter, prioritizing .env.test over process.env
+ */
+const getDefaultValue = (
+  key: string,
+  envTest: Record<string, string>
+): string => {
+  return envTest[key] || process.env[key] || '';
 };
 
 /**
@@ -80,8 +110,8 @@ const extractAuthorizationResult = (
       };
     } else if (state && state !== expectedState) {
       console.log(`⚠️  State mismatch detected`);
-      console.log(`   Received State: ${state}`);
       console.log(`   Expected State: ${expectedState}`);
+      console.log(`   Received State: ${state}`);
       console.log(
         `   This might indicate a security issue or different session`
       );
@@ -113,9 +143,25 @@ async function main(): Promise<void> {
   console.log('4. Copy redirect URL and paste it here');
   console.log('5. Extract authorization code for token exchange\n');
 
+  // Load .env.test file
+  const envTest = loadEnvTest();
+  if (Object.keys(envTest).length > 0) {
+    console.log('📁 Loaded configuration from .env.test file');
+  }
+
   try {
     // Step 1: Get issuer URL
-    const issuer = await question('Issuer URL: ');
+    const defaultIssuer = getDefaultValue('TEST_ISSUER', envTest);
+    const issuer =
+      (await question(
+        `Issuer URL${defaultIssuer ? ` (default: ${defaultIssuer})` : ''}: `
+      )) || defaultIssuer;
+
+    if (!issuer) {
+      console.error('❌ Issuer URL is required');
+      return;
+    }
+
     console.log(`\n📡 Fetching OpenID Configuration from: ${issuer}`);
 
     // Step 2: Fetch OpenID Configuration
@@ -128,8 +174,20 @@ async function main(): Promise<void> {
     console.log(`   Issuer: ${openIdConfig.issuer}\n`);
 
     // Step 3: Get client configuration
-    const clientId = await question('Client ID: ');
-    const redirectUri = await question('Redirect URI: ');
+    const defaultClientId = getDefaultValue('CLIENT_ID', envTest);
+    const clientId =
+      (await question(
+        `Client ID${defaultClientId ? ` (default: ${defaultClientId})` : ''}: `
+      )) || defaultClientId;
+
+    const defaultRedirectUri = getDefaultValue('REDIRECT_URI', envTest);
+    const redirectUri =
+      (await question(
+        `Redirect URI${
+          defaultRedirectUri ? ` (default: ${defaultRedirectUri})` : ''
+        }: `
+      )) || defaultRedirectUri;
+
     const scope = (await question('Scope (default: openid): ')) || 'openid';
     const responseType =
       (await question('Response Type (default: code): ')) || 'code';
@@ -187,11 +245,11 @@ async function main(): Promise<void> {
     console.log('1. Copy the URL above and paste it into your browser');
     console.log('2. Complete the authorization (login, consent, etc.)');
     console.log('3. You will be redirected to your redirect URI');
-    console.log('4. Copy the entire redirect URL from your browser');
+    console.log('4. Copy the entire redirected URL from your browser');
     console.log('5. Paste it below\n');
 
     // Step 5: Wait for manual authorization result
-    const redirectUrl = await question('Enter the redirect URL: ');
+    const redirectUrl = await question('Enter the redirected URL: ');
 
     if (!redirectUrl.trim()) {
       console.log('\n⚠️  No redirect URL provided. Exiting.');

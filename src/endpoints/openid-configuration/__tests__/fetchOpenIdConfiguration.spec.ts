@@ -72,7 +72,7 @@ describe('fetchOpenIdConfiguration', () => {
       });
 
       await expect(fetchOpenIdConfiguration(issuer)).rejects.toThrow(
-        'Issuer mismatch: requested'
+        'Issuer mismatch: received'
       );
 
       // Restore original fetch

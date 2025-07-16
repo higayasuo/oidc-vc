@@ -1,4 +1,5 @@
 import { fetchJson } from '@/utils/fetchJson';
+import { validateIssuer } from '@/utils/validateIssuer';
 import {
   openIdConfigurationResponseSchema,
   OpenIdConfigurationResponse,
@@ -8,29 +9,6 @@ import {
  * OpenID Configuration path
  */
 export const OPENID_CONFIGURATION_PATH = '/.well-known/openid-configuration';
-
-/**
- * Validates that the issuer in the OpenID Configuration response matches the requested issuer.
- * This is a security requirement from OpenID Connect Core 1.0 specification.
- *
- * @param {string} requestedIssuer - The issuer URL that was requested
- * @param {string} responseIssuer - The issuer URL returned in the configuration response
- * @throws {Error} If the issuers don't match
- */
-const validateIssuer = (
-  requestedIssuer: string,
-  responseIssuer: string
-): void => {
-  // Normalize both URLs by removing trailing slashes
-  const normalizedRequested = requestedIssuer.replace(/\/$/, '');
-  const normalizedResponse = responseIssuer.replace(/\/$/, '');
-
-  if (normalizedRequested !== normalizedResponse) {
-    throw new Error(
-      `Issuer mismatch: requested "${normalizedRequested}" but received "${normalizedResponse}"`
-    );
-  }
-};
 
 /**
  * Modifies the OpenID Configuration response to use local endpoints if the environment is test or development.
@@ -82,7 +60,10 @@ export const fetchOpenIdConfiguration = async (
 
   // Validate that the issuer in the response matches the requested issuer
   // This is a security requirement from OpenID Connect Core 1.0 specification
-  validateIssuer(issuer, response.issuer);
+  validateIssuer({
+    receivedIssuer: response.issuer,
+    expectedIssuer: issuer,
+  });
 
   return response;
 };
