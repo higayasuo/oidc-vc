@@ -26,7 +26,12 @@ const modifyResponseIfEnvIsTestOrDev = (
     process.env.NODE_ENV === 'development'
   ) {
     const modifiedResponse: Record<string, string> = {};
+
     modifiedResponse.issuer = issuer;
+    if (response.issuer !== issuer) {
+      modifiedResponse.original_issuer = response.issuer;
+    }
+
     Object.entries(response).forEach(([key, value]) => {
       if (key.endsWith('_endpoint') || key.endsWith('_uri')) {
         const url = new URL(value as string);

@@ -17,6 +17,7 @@
 
 import { fetchOpenIdConfiguration } from '../src/endpoints/openid-configuration';
 import { generateAuthorizationRequest } from '../src/endpoints/authorization';
+import { verifyAuthorizationResponse } from '../src/endpoints/authorization/verifyAuthorizationResponse';
 import { createInterface } from 'node:readline';
 import { randomBytes as nodeRandomBytes } from 'crypto';
 import { config } from 'dotenv';
@@ -67,71 +68,6 @@ const getDefaultValue = (
   envTest: Record<string, string>
 ): string => {
   return envTest[key] || process.env[key] || '';
-};
-
-/**
- * Extracts authorization code and validates state from redirect URL
- */
-const extractAuthorizationResult = (
-  redirectUrl: string,
-  expectedState: string
-): {
-  code: string;
-  state: string;
-  error?: string;
-  errorDescription?: string;
-} => {
-  try {
-    const urlParams = new URLSearchParams(redirectUrl.split('?')[1] || '');
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    const error = urlParams.get('error');
-    const errorDescription = urlParams.get('error_description');
-
-    console.log(`   Response URL: ${redirectUrl}`);
-    console.log(`   Response State: ${state || 'none'}`);
-    console.log(`   Expected State: ${expectedState}`);
-
-    if (code && state === expectedState) {
-      console.log('✅ Authorization code received successfully');
-      console.log(`   Code: ${code}`);
-      console.log(`   State: ${state}`);
-      return { code, state };
-    } else if (error) {
-      console.log(`❌ Authorization error: ${error}`);
-      console.log(`   Error Description: ${errorDescription || 'none'}`);
-      console.log(`   State: ${state || 'none'}`);
-      console.log(`   Expected State: ${expectedState}`);
-      return {
-        code: '',
-        state: '',
-        error,
-        errorDescription: errorDescription || undefined,
-      };
-    } else if (state && state !== expectedState) {
-      console.log(`⚠️  State mismatch detected`);
-      console.log(`   Expected State: ${expectedState}`);
-      console.log(`   Received State: ${state}`);
-      console.log(
-        `   This might indicate a security issue or different session`
-      );
-      return { code: '', state: '', error: 'state_mismatch' };
-    } else {
-      console.log(`⚠️  No authorization code or error found in URL`);
-      console.log(`   State: ${state || 'none'}`);
-      console.log(`   Expected State: ${expectedState}`);
-
-      // Show all URL parameters for debugging
-      console.log('   URL Parameters:');
-      for (const [key, value] of urlParams.entries()) {
-        console.log(`     ${key}: ${value}`);
-      }
-      return { code: '', state: '', error: 'no_code_or_error' };
-    }
-  } catch (error) {
-    console.error('❌ Error parsing redirect URL:', error);
-    return { code: '', state: '', error: 'invalid_url' };
-  }
 };
 
 async function main(): Promise<void> {
@@ -256,49 +192,59 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Step 6: Extract authorization result
+    // Step 6: Extract authorization result using verifyAuthorizationResponse
     console.log('\n🔍 Analyzing redirect result...');
-    const result = extractAuthorizationResult(redirectUrl, expectedState);
+    try {
+      const code = verifyAuthorizationResponse(redirectUrl, {
+        state: expectedState,
+        issuer: openIdConfig.original_issuer ?? openIdConfig.issuer,
+        clientId,
+        redirectUri,
+      });
+      // Step 7: Instructions for token exchange
+      if (code) {
+        console.log('\n' + '='.repeat(80));
+        console.log('🔄 TOKEN EXCHANGE');
+        console.log('='.repeat(80));
+        console.log(`Token Endpoint: ${openIdConfig.token_endpoint}`);
+        console.log(`Authorization Code: ${code}`);
+        console.log(`Code Verifier: ${authResult.codeVerifier}`);
+        console.log(`Client ID: ${clientId}`);
+        console.log(`Redirect URI: ${redirectUri}`);
+        console.log('='.repeat(80));
 
-    // Step 7: Instructions for token exchange
-    if (result.code) {
-      console.log('\n' + '='.repeat(80));
-      console.log('🔄 TOKEN EXCHANGE');
-      console.log('='.repeat(80));
-      console.log(`Token Endpoint: ${openIdConfig.token_endpoint}`);
-      console.log(`Authorization Code: ${result.code}`);
-      console.log(`Code Verifier: ${authResult.codeVerifier}`);
-      console.log(`Client ID: ${clientId}`);
-      console.log(`Redirect URI: ${redirectUri}`);
-      console.log('='.repeat(80));
+        console.log('\n📋 TOKEN EXCHANGE REQUEST:');
+        console.log('POST', openIdConfig.token_endpoint);
+        console.log('Content-Type: application/x-www-form-urlencoded');
+        console.log('');
+        console.log('grant_type=authorization_code');
+        console.log(`code=${code}`);
+        console.log(`redirect_uri=${encodeURIComponent(redirectUri)}`);
+        console.log(`client_id=${encodeURIComponent(clientId)}`);
+        console.log(`code_verifier=${authResult.codeVerifier}`);
+        console.log('');
 
-      console.log('\n📋 TOKEN EXCHANGE REQUEST:');
-      console.log('POST', openIdConfig.token_endpoint);
-      console.log('Content-Type: application/x-www-form-urlencoded');
-      console.log('');
-      console.log('grant_type=authorization_code');
-      console.log(`code=${result.code}`);
-      console.log(`redirect_uri=${encodeURIComponent(redirectUri)}`);
-      console.log(`client_id=${encodeURIComponent(clientId)}`);
-      console.log(`code_verifier=${authResult.codeVerifier}`);
-      console.log('');
-
-      console.log('🔍 ID TOKEN VALIDATION:');
-      console.log('- Verify iss parameter matches the issuer URL');
-      console.log('- Verify aud parameter matches the client_id');
-      console.log('- Check token signature using JWKS endpoint');
-      console.log('- Verify token expiration (exp claim)');
-      console.log('- Validate nonce if provided');
-    } else {
+        console.log('🔍 ID TOKEN VALIDATION:');
+        console.log('- Verify iss parameter matches the issuer URL');
+        console.log('- Verify aud parameter matches the client_id');
+        console.log('- Check token signature using JWKS endpoint');
+        console.log('- Verify token expiration (exp claim)');
+        console.log('- Validate nonce if provided');
+      } else {
+        console.log(
+          '\n❌ No authorization code received. Token exchange cannot proceed.'
+        );
+      }
+    } catch (error) {
+      console.log('\n❌ Error analyzing redirect result:');
+      if (error instanceof Error) {
+        console.log('   ' + error.message);
+      } else {
+        console.log('   ' + String(error));
+      }
       console.log(
         '\n⚠️  No authorization code received. Token exchange cannot proceed.'
       );
-      if (result.error) {
-        console.log(`   Error: ${result.error}`);
-        if (result.errorDescription) {
-          console.log(`   Description: ${result.errorDescription}`);
-        }
-      }
     }
   } catch (error) {
     console.error(

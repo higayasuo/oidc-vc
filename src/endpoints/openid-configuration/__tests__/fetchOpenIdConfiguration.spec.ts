@@ -99,6 +99,8 @@ describe('fetchOpenIdConfiguration', () => {
 
       const config = await fetchOpenIdConfiguration(issuer);
       expect(config.issuer).toContain(issuer);
+      // original_issuer should not be present when issuer matches (no modification)
+      expect(config.original_issuer).toBeUndefined();
 
       // Restore original fetch
       global.fetch = originalFetch;
@@ -133,6 +135,9 @@ describe('fetchOpenIdConfiguration', () => {
       expect(config.pushed_authorization_request_endpoint).toContain(issuer);
       expect(config.revocation_endpoint).toContain(issuer);
       expect(config.introspection_endpoint).toContain(issuer);
+      // original_issuer should be present when issuer is modified
+      expect(config.original_issuer).toBeDefined();
+      expect(config.original_issuer).not.toBe(issuer);
     }, 10000);
 
     it('should convert production endpoints to local endpoints in test environment', async () => {
@@ -147,6 +152,9 @@ describe('fetchOpenIdConfiguration', () => {
       expect(config.pushed_authorization_request_endpoint).toContain(issuer);
       expect(config.revocation_endpoint).toContain(issuer);
       expect(config.introspection_endpoint).toContain(issuer);
+      // original_issuer should be present when issuer is modified
+      expect(config.original_issuer).toBeDefined();
+      expect(config.original_issuer).not.toBe(issuer);
     }, 10000);
   });
 });
