@@ -20,7 +20,7 @@ export default defineConfig({
       fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['u8a-utils', 'zod'],
+      external: ['u8a-utils', 'zod', /^@noble\/hashes($|\/)/],
       output: {
         globals: {},
       },

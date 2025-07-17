@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getErrorMessage } from '../errorUtils';
+import { getErrorMessage } from '../getErrorMessage';
 
 describe('getErrorMessage', () => {
   it('should return the message from an Error instance', () => {
@@ -61,6 +61,8 @@ describe('getErrorMessage', () => {
 
   it('should handle errors with special characters', () => {
     const specialError = new Error('Error with special chars: !@#$%^&*()');
-    expect(getErrorMessage(specialError)).toBe('Error with special chars: !@#$%^&*()');
+    expect(getErrorMessage(specialError)).toBe(
+      'Error with special chars: !@#$%^&*()'
+    );
   });
 });
