@@ -1,5 +1,5 @@
-import { generateState } from '../../utils/generateState';
-import { generatePkce } from '../../utils/generatePkce';
+import { randomBase64Url } from '@/utils/randomBase64Url';
+import { pkce } from '@/utils/pkce';
 import type { RandomBytes } from '@/types';
 
 /**
@@ -24,6 +24,7 @@ export type AuthorizationRequestParams = {
 type GenerateAuthorizationRequestResult = {
   url: URL;
   codeVerifier: string;
+  nonce: string | undefined;
 };
 
 /**
@@ -61,30 +62,28 @@ export const generateAuthorizationRequest = (
   }: AuthorizationRequestParams,
   randomBytes: RandomBytes
 ): GenerateAuthorizationRequestResult => {
-  // Generate state
-  const state = generateState(randomBytes);
-
-  // Generate PKCE
-  const { codeVerifier, codeChallenge } = generatePkce(randomBytes);
-
-  // Build the authorization request URL
+  const state = randomBase64Url(randomBytes);
+  const { codeVerifier, codeChallenge } = pkce(randomBytes);
   const url = new URL(authorizationEndpoint);
 
-  // Required parameters
   url.searchParams.set('response_type', responseType);
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('scope', scope);
   url.searchParams.set('state', state);
-
-  // PKCE parameters
   url.searchParams.set('code_challenge', codeChallenge);
   url.searchParams.set('code_challenge_method', 'S256');
 
-  // Additional parameters
   Object.entries(additionalParams).forEach(([key, value]) => {
     url.searchParams.set(key, value);
   });
 
-  return { url, codeVerifier };
+  const hasOpenIdScope = scope.includes('openid');
+  const nonce = hasOpenIdScope ? randomBase64Url(randomBytes) : undefined;
+
+  if (hasOpenIdScope && nonce) {
+    url.searchParams.set('nonce', nonce);
+  }
+
+  return { url, codeVerifier, nonce };
 };

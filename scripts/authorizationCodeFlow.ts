@@ -71,8 +71,10 @@ const getDefaultValue = (
 };
 
 async function main(): Promise<void> {
-  console.log('🔐 OIDC Authorization Flow Generator\n');
-  console.log('This tool helps you complete the OIDC authorization flow:\n');
+  console.log('🔐 OIDC Authorization Code Flow Generator\n');
+  console.log(
+    'This tool helps you complete the OIDC authorization code flow:\n'
+  );
   console.log('1. Fetch OpenID Configuration from issuer');
   console.log('2. Generate authorization request URL');
   console.log('3. Open URL in browser and complete authorization');

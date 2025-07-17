@@ -17,7 +17,7 @@ describe('generateAuthorizationRequest', () => {
     redirectUri,
   };
 
-  it('should generate basic authorization request URL', () => {
+  it('should generate basic authorization request URL with nonce for openid scope', () => {
     const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
 
     expect(result.url.href).toContain(`${issuer}/api/authorization`);
@@ -28,7 +28,27 @@ describe('generateAuthorizationRequest', () => {
     expect(result.url.searchParams.get('state')).toBeDefined();
     expect(result.url.searchParams.get('code_challenge')).toBeDefined();
     expect(result.url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(result.url.searchParams.get('nonce')).toBeDefined();
     expect(result.codeVerifier).toBeDefined();
+    expect(result.nonce).toBeDefined();
+  });
+
+  it('should not generate nonce when scope does not include openid', () => {
+    const config = { ...baseConfig, scope: 'email profile' };
+    const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+    expect(result.url.searchParams.get('scope')).toBe('email profile');
+    expect(result.url.searchParams.get('nonce')).toBeNull();
+    expect(result.nonce).toBeUndefined();
+  });
+
+  it('should generate nonce when scope includes openid among other scopes', () => {
+    const config = { ...baseConfig, scope: 'openid email profile' };
+    const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+    expect(result.url.searchParams.get('scope')).toBe('openid email profile');
+    expect(result.url.searchParams.get('nonce')).toBeDefined();
+    expect(result.nonce).toBeDefined();
   });
 
   it('should use custom response type', () => {
@@ -36,6 +56,7 @@ describe('generateAuthorizationRequest', () => {
     const result = generateAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('response_type')).toBe('token');
+    expect(result.nonce).toBeDefined(); // openid scope is default
   });
 
   it('should include additional parameters', () => {
@@ -52,6 +73,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result.url.searchParams.get('prompt')).toBe('consent');
     expect(result.url.searchParams.get('access_type')).toBe('offline');
     expect(result.url.searchParams.get('include_granted_scopes')).toBe('true');
+    expect(result.nonce).toBeDefined(); // openid scope is default
   });
 
   it('should generate consistent URLs with same input', () => {
@@ -60,6 +82,7 @@ describe('generateAuthorizationRequest', () => {
 
     expect(result1.url.href).toBe(result2.url.href);
     expect(result1.codeVerifier).toBe(result2.codeVerifier);
+    expect(result1.nonce).toBe(result2.nonce);
   });
 
   it('should generate different URLs with different random values', () => {
@@ -81,6 +104,7 @@ describe('generateAuthorizationRequest', () => {
 
     expect(result1.url.href).not.toBe(result2.url.href);
     expect(result1.codeVerifier).not.toBe(result2.codeVerifier);
+    expect(result1.nonce).not.toBe(result2.nonce);
   });
 
   it('should properly encode URL parameters', () => {
@@ -97,6 +121,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result.url.searchParams.get('scope')).toBe(
       'openid email profile custom:scope'
     );
+    expect(result.nonce).toBeDefined();
   });
 
   it('should handle empty additional parameters', () => {
@@ -112,10 +137,38 @@ describe('generateAuthorizationRequest', () => {
       'state',
       'code_challenge',
       'code_challenge_method',
+      'nonce', // openid scope is default
     ];
 
     expectedParams.forEach((param) => {
       expect(result.url.searchParams.has(param)).toBe(true);
     });
+  });
+
+  it('should handle empty additional parameters without nonce for non-openid scope', () => {
+    const config = {
+      ...baseConfig,
+      scope: 'email profile',
+      additionalParams: {},
+    };
+    const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+    // Should not contain nonce parameter
+    const expectedParams = [
+      'response_type',
+      'client_id',
+      'redirect_uri',
+      'scope',
+      'state',
+      'code_challenge',
+      'code_challenge_method',
+    ];
+
+    expectedParams.forEach((param) => {
+      expect(result.url.searchParams.has(param)).toBe(true);
+    });
+
+    expect(result.url.searchParams.has('nonce')).toBe(false);
+    expect(result.nonce).toBeUndefined();
   });
 });

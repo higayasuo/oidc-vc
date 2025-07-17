@@ -14,23 +14,15 @@ type GeneratePkceResult = {
   codeChallenge: string;
 };
 
-/**
- * Generates PKCE (Proof Key for Code Exchange) code_verifier and code_challenge.
- *
- * @param {RandomBytes} randomBytes - Function to generate random bytes
- * @param {number} [byteLength=32] - Number of bytes to generate for code_verifier (default: 32)
- * @returns {GeneratePkceResult} Object containing code_verifier and code_challenge as Base64URL strings
- */
-export const generatePkce = (randomBytes: RandomBytes, byteLength: number = 32): GeneratePkceResult => {
-  // Generate code_verifier as random bytes
+export const pkce = (
+  randomBytes: RandomBytes,
+  byteLength: number = 32
+): GeneratePkceResult => {
   const codeVerifierBytes = randomBytes(byteLength);
-
-  // Generate code_challenge as SHA256 hash of code_verifier
   const codeChallengeBytes = sha256(codeVerifierBytes);
 
-  // Convert both to Base64URL format
   return {
     codeVerifier: encodeBase64Url(codeVerifierBytes),
-    codeChallenge: encodeBase64Url(codeChallengeBytes)
+    codeChallenge: encodeBase64Url(codeChallengeBytes),
   };
 };
