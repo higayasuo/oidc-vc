@@ -68,6 +68,9 @@ describe('fetchOpenIdConfiguration', () => {
               'https://different-issuer.com/par',
             revocation_endpoint: 'https://different-issuer.com/revoke',
             introspection_endpoint: 'https://different-issuer.com/introspect',
+            response_types_supported: ['code', 'token'],
+            subject_types_supported: ['public'],
+            id_token_signing_alg_values_supported: ['RS256'],
           }),
       });
 
@@ -94,6 +97,9 @@ describe('fetchOpenIdConfiguration', () => {
             pushed_authorization_request_endpoint: 'https://example.com/par',
             revocation_endpoint: 'https://example.com/revoke',
             introspection_endpoint: 'https://example.com/introspect',
+            response_types_supported: ['code', 'token'],
+            subject_types_supported: ['public'],
+            id_token_signing_alg_values_supported: ['RS256'],
           }),
       });
 
@@ -156,5 +162,105 @@ describe('fetchOpenIdConfiguration', () => {
       expect(config.original_issuer).toBeDefined();
       expect(config.original_issuer).not.toBe(issuer);
     }, 10000);
+
+    it('should preserve all non-endpoint properties in development environment', async () => {
+      process.env.NODE_ENV = 'development';
+
+      // Mock fetch to return a response with various properties
+      const originalFetch = global.fetch;
+      const mockResponse = {
+        issuer: 'https://original-issuer.com',
+        authorization_endpoint: 'https://original-issuer.com/auth',
+        token_endpoint: 'https://original-issuer.com/token',
+        jwks_uri: 'https://original-issuer.com/jwks',
+        userinfo_endpoint: 'https://original-issuer.com/userinfo',
+        response_types_supported: ['code', 'token'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+        scopes_supported: ['openid', 'profile', 'email'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
+        claims_supported: ['sub', 'iss', 'name', 'email'],
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const config = await fetchOpenIdConfiguration(issuer);
+
+      // Endpoints should be converted to local issuer
+      expect(config.authorization_endpoint).toContain(issuer);
+      expect(config.token_endpoint).toContain(issuer);
+      expect(config.jwks_uri).toContain(issuer);
+      expect(config.userinfo_endpoint).toContain(issuer);
+
+      // Non-endpoint properties should be preserved exactly
+      expect(config.response_types_supported).toEqual(['code', 'token']);
+      expect(config.subject_types_supported).toEqual(['public']);
+      expect(config.id_token_signing_alg_values_supported).toEqual(['RS256']);
+      expect(config.scopes_supported).toEqual(['openid', 'profile', 'email']);
+      expect(config.token_endpoint_auth_methods_supported).toEqual([
+        'client_secret_basic',
+      ]);
+      expect(config.claims_supported).toEqual(['sub', 'iss', 'name', 'email']);
+
+      // Issuer should be updated
+      expect(config.issuer).toBe(issuer);
+      expect(config.original_issuer).toBe('https://original-issuer.com');
+
+      // Restore original fetch
+      global.fetch = originalFetch;
+    });
+
+    it('should preserve all non-endpoint properties in test environment', async () => {
+      process.env.NODE_ENV = 'test';
+
+      // Mock fetch to return a response with various properties
+      const originalFetch = global.fetch;
+      const mockResponse = {
+        issuer: 'https://original-issuer.com',
+        authorization_endpoint: 'https://original-issuer.com/auth',
+        token_endpoint: 'https://original-issuer.com/token',
+        jwks_uri: 'https://original-issuer.com/jwks',
+        userinfo_endpoint: 'https://original-issuer.com/userinfo',
+        response_types_supported: ['code', 'token'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+        scopes_supported: ['openid', 'profile', 'email'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
+        claims_supported: ['sub', 'iss', 'name', 'email'],
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const config = await fetchOpenIdConfiguration(issuer);
+
+      // Endpoints should be converted to local issuer
+      expect(config.authorization_endpoint).toContain(issuer);
+      expect(config.token_endpoint).toContain(issuer);
+      expect(config.jwks_uri).toContain(issuer);
+      expect(config.userinfo_endpoint).toContain(issuer);
+
+      // Non-endpoint properties should be preserved exactly
+      expect(config.response_types_supported).toEqual(['code', 'token']);
+      expect(config.subject_types_supported).toEqual(['public']);
+      expect(config.id_token_signing_alg_values_supported).toEqual(['RS256']);
+      expect(config.scopes_supported).toEqual(['openid', 'profile', 'email']);
+      expect(config.token_endpoint_auth_methods_supported).toEqual([
+        'client_secret_basic',
+      ]);
+      expect(config.claims_supported).toEqual(['sub', 'iss', 'name', 'email']);
+
+      // Issuer should be updated
+      expect(config.issuer).toBe(issuer);
+      expect(config.original_issuer).toBe('https://original-issuer.com');
+
+      // Restore original fetch
+      global.fetch = originalFetch;
+    });
   });
 });

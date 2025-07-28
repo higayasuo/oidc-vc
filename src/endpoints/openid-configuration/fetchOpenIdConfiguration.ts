@@ -4,6 +4,7 @@ import {
   openIdConfigurationResponseSchema,
   OpenIdConfigurationResponse,
 } from './OpenIdConfigurationResponse';
+import { concatUrlPaths } from '@/utils/concatUrlPaths';
 
 /**
  * OpenID Configuration path
@@ -27,16 +28,18 @@ const modifyResponseIfEnvIsTestOrDev = (
   ) {
     const modifiedResponse: Record<string, string> = {};
 
-    modifiedResponse.issuer = issuer;
-    if (response.issuer !== issuer) {
-      modifiedResponse.original_issuer = response.issuer;
-    }
-
     Object.entries(response).forEach(([key, value]) => {
       if (key.endsWith('_endpoint') || key.endsWith('_uri')) {
         const url = new URL(value as string);
         const localUrl = new URL(url.pathname + url.search, issuer);
         modifiedResponse[key] = localUrl.toString();
+      } else if (key === 'issuer') {
+        modifiedResponse.issuer = issuer;
+        if (response.issuer !== issuer) {
+          modifiedResponse.original_issuer = response.issuer;
+        }
+      } else {
+        modifiedResponse[key] = value as string;
       }
     });
 
@@ -56,11 +59,11 @@ const modifyResponseIfEnvIsTestOrDev = (
 export const fetchOpenIdConfiguration = async (
   issuer: string
 ): Promise<OpenIdConfigurationResponse> => {
-  const originalResponse = await fetchJson(
-    issuer,
-    OPENID_CONFIGURATION_PATH,
-    openIdConfigurationResponseSchema
-  );
+  const originalResponse = await fetchJson({
+    url: concatUrlPaths(issuer, OPENID_CONFIGURATION_PATH),
+    schema: openIdConfigurationResponseSchema,
+  });
+
   const response = modifyResponseIfEnvIsTestOrDev(originalResponse, issuer);
 
   // Validate that the issuer in the response matches the requested issuer

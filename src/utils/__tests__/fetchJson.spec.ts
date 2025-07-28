@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from 'vitest';
 import { z } from 'zod';
 import { fetchJson } from '../fetchJson';
 
@@ -35,12 +43,16 @@ describe('fetchJson', () => {
       value: z.number(),
     });
 
-    const result = await fetchJson('https://example.com', 'api/data', schema);
+    const result = await fetchJson({
+      url: 'https://example.com/api/data',
+      schema,
+    });
 
     expect(result).toEqual(mockData);
     expect(global.fetch).toHaveBeenCalledWith('https://example.com/api/data', {
+      method: 'GET',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
     });
   });
@@ -55,9 +67,14 @@ describe('fetchJson', () => {
 
     const schema = z.object({});
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow('HTTP 404 Not Found: Failed to fetch from https://example.com/api/data');
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      'Failed to fetch from https://example.com/api/data: HTTP 404 Not Found'
+    );
   });
 
   it('should throw error for network errors', async () => {
@@ -66,23 +83,35 @@ describe('fetchJson', () => {
 
     const schema = z.object({});
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow('Failed to fetch from https://example.com/api/data: NetworkError: Failed to fetch');
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      'Failed to fetch from https://example.com/api/data: NetworkError: Failed to fetch'
+    );
   });
 
   it('should throw error for JSON parse errors', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token < in JSON')),
+      json: vi
+        .fn()
+        .mockRejectedValue(new SyntaxError('Unexpected token < in JSON')),
     };
     (global.fetch as any).mockResolvedValue(mockResponse);
 
     const schema = z.object({});
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow('Failed to fetch from https://example.com/api/data: Unexpected token < in JSON');
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      'Failed to fetch from https://example.com/api/data: Unexpected token < in JSON'
+    );
   });
 
   it('should throw error for schema validation failures', async () => {
@@ -98,9 +127,14 @@ describe('fetchJson', () => {
       value: z.number(), // Required field
     });
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow(/Failed to fetch from https:\/\/example\.com\/api\/data:.*/);
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      /Failed to fetch from https:\/\/example\.com\/api\/data:.*/
+    );
   });
 
   it('should handle string errors', async () => {
@@ -109,9 +143,14 @@ describe('fetchJson', () => {
 
     const schema = z.object({});
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow('Failed to fetch from https://example.com/api/data: Custom error message');
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      'Failed to fetch from https://example.com/api/data: Custom error message'
+    );
   });
 
   it('should handle null errors', async () => {
@@ -119,9 +158,14 @@ describe('fetchJson', () => {
 
     const schema = z.object({});
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow('Failed to fetch from https://example.com/api/data: null');
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      'Failed to fetch from https://example.com/api/data: null'
+    );
   });
 
   it('should handle undefined errors', async () => {
@@ -129,31 +173,59 @@ describe('fetchJson', () => {
 
     const schema = z.object({});
 
-    await expect(fetchJson('https://example.com', 'api/data', schema))
-      .rejects
-      .toThrow('Failed to fetch from https://example.com/api/data: undefined');
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+      })
+    ).rejects.toThrow(
+      'Failed to fetch from https://example.com/api/data: undefined'
+    );
   });
 
-  it('should construct URL correctly with trailing slash in issuer', async () => {
-    const mockData = { test: true };
+  it('should support POST requests with custom headers and body', async () => {
+    const mockData = { success: true };
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue(mockData),
     };
     (global.fetch as any).mockResolvedValue(mockResponse);
 
-    const schema = z.object({ test: z.boolean() });
+    const schema = z.object({ success: z.boolean() });
 
-    await fetchJson('https://example.com/', 'api/data', schema);
+    await fetchJson({
+      url: 'https://example.com/api/data',
+      schema,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test: 'data' }),
+    });
 
     expect(global.fetch).toHaveBeenCalledWith('https://example.com/api/data', {
+      method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ test: 'data' }),
     });
   });
 
-  it('should construct URL correctly without trailing slash in issuer', async () => {
+  it('should throw error for non-JSON Accept header', async () => {
+    const schema = z.object({});
+
+    await expect(
+      fetchJson({
+        url: 'https://example.com/api/data',
+        schema,
+        headers: { Accept: 'application/xml' },
+      })
+    ).rejects.toThrow(
+      'fetchJson expects JSON responses, but Accept header specifies: application/xml'
+    );
+  });
+
+  it('should allow Accept header that includes application/json', async () => {
     const mockData = { test: true };
     const mockResponse = {
       ok: true,
@@ -163,11 +235,16 @@ describe('fetchJson', () => {
 
     const schema = z.object({ test: z.boolean() });
 
-    await fetchJson('https://example.com', 'api/data', schema);
+    await fetchJson({
+      url: 'https://example.com/api/data',
+      schema,
+      headers: { Accept: 'application/json, text/plain' },
+    });
 
     expect(global.fetch).toHaveBeenCalledWith('https://example.com/api/data', {
+      method: 'GET',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json, text/plain',
       },
     });
   });

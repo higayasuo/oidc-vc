@@ -22,6 +22,7 @@ import { createInterface } from 'node:readline';
 import { randomBytes as nodeRandomBytes } from 'crypto';
 import { config } from 'dotenv';
 import type { RandomBytes } from '../src/types';
+import { fetchToken } from '../src/endpoints/token/fetchToken';
 
 // Adapter: Node.js randomBytes to Uint8Array for RandomBytes type
 const randomBytes: RandomBytes = (byteLength = 32) => {
@@ -164,6 +165,20 @@ async function main(): Promise<void> {
     const authResult = generateAuthorizationRequest(authParams, randomBytes);
     const expectedState = authResult.url.searchParams.get('state')!;
 
+    // Debug: Verify PKCE calculation
+    console.log('\n🔍 PKCE Verification:');
+    console.log(
+      'Code Challenge (from auth request):',
+      authResult.url.searchParams.get('code_challenge')
+    );
+    console.log('Code Verifier:', authResult.codeVerifier);
+    console.log('Code Verifier Length:', authResult.codeVerifier.length);
+    console.log(
+      'RFC 7636 Compliant (43-128 chars):',
+      authResult.codeVerifier.length >= 43 &&
+        authResult.codeVerifier.length <= 128
+    );
+
     // Output authorization URL
     console.log('\n' + '='.repeat(80));
     console.log('🔗 AUTHORIZATION REQUEST URL');
@@ -215,23 +230,40 @@ async function main(): Promise<void> {
         console.log(`Redirect URI: ${redirectUri}`);
         console.log('='.repeat(80));
 
-        console.log('\n📋 TOKEN EXCHANGE REQUEST:');
-        console.log('POST', openIdConfig.token_endpoint);
-        console.log('Content-Type: application/x-www-form-urlencoded');
-        console.log('');
-        console.log('grant_type=authorization_code');
-        console.log(`code=${code}`);
-        console.log(`redirect_uri=${encodeURIComponent(redirectUri)}`);
-        console.log(`client_id=${encodeURIComponent(clientId)}`);
-        console.log(`code_verifier=${authResult.codeVerifier}`);
-        console.log('');
+        // Use fetchToken to exchange code for tokens
+        try {
+          console.log('\n🔍 Token Request Debug:');
+          console.log('Request Body:');
+          const body = new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            code_verifier: authResult.codeVerifier,
+            redirect_uri: redirectUri,
+            client_id: clientId,
+          });
+          console.log(body.toString());
+          console.log('');
 
-        console.log('🔍 ID TOKEN VALIDATION:');
-        console.log('- Verify iss parameter matches the issuer URL');
-        console.log('- Verify aud parameter matches the client_id');
-        console.log('- Check token signature using JWKS endpoint');
-        console.log('- Verify token expiration (exp claim)');
-        console.log('- Validate nonce if provided');
+          const tokenResponse = await fetchToken({
+            tokenEndpoint: openIdConfig.token_endpoint,
+            clientId,
+            clientSecret: envTest['CLIENT_SECRET'],
+            // clientSecret is not used in PKCE public clients, but you can add logic to prompt if needed
+            code,
+            codeVerifier: authResult.codeVerifier,
+            redirectUri,
+            grantType: 'authorization_code',
+          });
+          console.log('\n✅ Token Response:');
+          console.log(JSON.stringify(tokenResponse, undefined, 2));
+        } catch (tokenError) {
+          console.error('\n❌ Token exchange failed:');
+          if (tokenError instanceof Error) {
+            console.error('   ' + tokenError.message);
+          } else {
+            console.error('   ' + String(tokenError));
+          }
+        }
       } else {
         console.log(
           '\n❌ No authorization code received. Token exchange cannot proceed.'

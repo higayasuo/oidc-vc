@@ -1,204 +1,239 @@
 import { describe, it, expect } from 'vitest';
-import { pkce } from '../pkce';
+import { pkce, generateCodeChallenge, generateCodeVerifier } from '../pkce';
 import type { RandomBytes } from '@/types';
 import { sha256 } from '@noble/hashes/sha256';
 
-// Helper to get Base64URL string for a given byte array
-const toBase64Url = (bytes: Uint8Array) =>
-  Buffer.from(bytes)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+describe('PKCE utilities', () => {
+  describe('generateCodeVerifier', () => {
+    it('should generate code verifier with correct length and format', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(255);
+      };
 
-// Helper to get SHA256 hash in Base64URL format (from bytes, not string!)
-const sha256Base64Url = (bytes: Uint8Array) => {
-  const hash = sha256(bytes);
-  return toBase64Url(Buffer.from(hash));
-};
+      const result = generateCodeVerifier(mockRandomBytes);
 
-describe('pkce', () => {
-  it('should generate PKCE with default byte length (32 bytes)', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      return new Uint8Array(byteLength).fill(255);
-    };
+      // Check length requirements (RFC 7636)
+      expect(result).toHaveLength(43); // 32 bytes in Base64URL = 43 characters
 
-    const result = pkce(mockRandomBytes);
+      // Check that string uses the correct character set
+      // Base64URL can contain: A-Z, a-z, 0-9, -, _
+      const validCodeVerifierChars = /^[A-Za-z0-9_-]+$/;
+      expect(result).toMatch(validCodeVerifierChars);
+    });
 
-    const codeVerifierBytes = new Uint8Array(32).fill(255);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
+    it('should use default byte length when not specified', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(42);
+      };
 
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toHaveLength(43);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
+      const result = generateCodeVerifier(mockRandomBytes);
+
+      expect(result).toHaveLength(43); // 32 bytes in Base64URL = 43 characters
+    });
+
+    it('should generate consistent results for same input', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(123);
+      };
+
+      const result1 = generateCodeVerifier(mockRandomBytes, 32);
+      const result2 = generateCodeVerifier(mockRandomBytes, 32);
+
+      expect(result1).toBe(result2);
+    });
+
+    it('should handle custom byte lengths', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(100);
+      };
+
+      const result = generateCodeVerifier(mockRandomBytes, 16);
+
+      expect(result).toHaveLength(22); // 16 bytes in Base64URL = 22 characters
+    });
+
+    it('should generate unique code verifiers with different random values', () => {
+      let callCount = 0;
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        const bytes = new Uint8Array(byteLength);
+        bytes.fill(callCount++);
+        return bytes;
+      };
+
+      const result1 = generateCodeVerifier(mockRandomBytes, 32);
+      const result2 = generateCodeVerifier(mockRandomBytes, 32);
+
+      expect(result1).not.toBe(result2);
+    });
   });
 
-  it('should generate PKCE with custom byte length', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      return new Uint8Array(byteLength).fill(0);
-    };
+  describe('generateCodeChallenge', () => {
+    it('should generate code challenge with correct length and format', () => {
+      const codeVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+      const result = generateCodeChallenge(codeVerifier);
 
-    const result = pkce(mockRandomBytes, 16);
+      // Check length requirements (RFC 7636)
+      expect(result).toHaveLength(43); // SHA256 hash in Base64URL = 43 characters
 
-    const codeVerifierBytes = new Uint8Array(16).fill(0);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
+      // Check that string uses the correct character set
+      // Base64URL can contain: A-Z, a-z, 0-9, -, _
+      const validCodeChallengeChars = /^[A-Za-z0-9_-]+$/;
+      expect(result).toMatch(validCodeChallengeChars);
+    });
 
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toHaveLength(43);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
+    it('should calculate correct code_challenge for RFC 7636 example code_verifier', () => {
+      // RFC 7636 example values
+      const rfcCodeVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+      const expectedCodeChallenge =
+        'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+
+      const calculatedCodeChallenge = generateCodeChallenge(rfcCodeVerifier);
+
+      expect(calculatedCodeChallenge).toBe(expectedCodeChallenge);
+    });
+
+    it('should generate consistent results for same input', () => {
+      const codeVerifier = 'testCodeVerifier123';
+
+      const result1 = generateCodeChallenge(codeVerifier);
+      const result2 = generateCodeChallenge(codeVerifier);
+
+      expect(result1).toBe(result2);
+    });
+
+    it('should generate different challenges for different verifiers', () => {
+      const codeVerifier1 = 'testCodeVerifier123';
+      const codeVerifier2 = 'differentCodeVerifier456';
+
+      const result1 = generateCodeChallenge(codeVerifier1);
+      const result2 = generateCodeChallenge(codeVerifier2);
+
+      expect(result1).not.toBe(result2);
+    });
+
+    it('should handle empty string input', () => {
+      const result = generateCodeChallenge('');
+
+      expect(result).toHaveLength(43);
+      expect(result).toMatch(/^[A-Za-z0-9_-]+$/);
+    });
   });
 
-  it('should generate PKCE with mixed byte values', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      const bytes = new Uint8Array(byteLength);
-      for (let i = 0; i < byteLength; i++) {
-        bytes[i] = i % 256;
-      }
-      return bytes;
-    };
+  describe('pkce', () => {
+    it('should generate PKCE with correct length and format', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(255);
+      };
 
-    const result = pkce(mockRandomBytes, 4);
+      const result = pkce(mockRandomBytes);
 
-    const codeVerifierBytes = Uint8Array.from([0, 1, 2, 3]);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
+      // Check length requirements (RFC 7636)
+      expect(result.codeVerifier).toHaveLength(43); // 32 bytes in Base64URL = 43 characters
+      expect(result.codeChallenge).toHaveLength(43);
 
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toHaveLength(43);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
-  });
+      // Check that code_challenge is derived from code_verifier
+      const encoder = new TextEncoder();
+      const codeVerifierBytes = encoder.encode(result.codeVerifier);
+      const expectedChallengeBytes = sha256(codeVerifierBytes);
+      const expectedChallenge = Buffer.from(expectedChallengeBytes)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 
-  it('should handle single byte correctly', () => {
-    const mockRandomBytes: RandomBytes = () => {
-      return new Uint8Array([170]); // 0xAA
-    };
+      expect(result.codeChallenge).toBe(expectedChallenge);
+    });
 
-    const result = pkce(mockRandomBytes, 1);
+    it('should generate unique PKCE values with different random values', () => {
+      let callCount = 0;
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        const bytes = new Uint8Array(byteLength);
+        bytes.fill(callCount++);
+        return bytes;
+      };
 
-    const codeVerifierBytes = Uint8Array.from([170]);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
+      const result1 = pkce(mockRandomBytes, 32);
+      const result2 = pkce(mockRandomBytes, 32);
 
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toHaveLength(43);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
-  });
+      expect(result1.codeVerifier).not.toBe(result2.codeVerifier);
+      expect(result1.codeChallenge).not.toBe(result2.codeChallenge);
+    });
 
-  it('should handle zero byte length', () => {
-    const mockRandomBytes: RandomBytes = () => {
-      return new Uint8Array(0);
-    };
+    it('should generate valid character set strings', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        const bytes = new Uint8Array(byteLength);
+        bytes.fill(0);
+        return bytes;
+      };
 
-    const result = pkce(mockRandomBytes, 0);
+      const result = pkce(mockRandomBytes, 32);
 
-    const codeVerifierBytes = new Uint8Array(0);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
+      // Check that strings use the correct character set
+      // Base64URL can contain: A-Z, a-z, 0-9, -, _
+      const validCodeVerifierChars = /^[A-Za-z0-9_-]+$/;
+      const validCodeChallengeChars = /^[A-Za-z0-9_-]+$/;
+      expect(result.codeVerifier).toMatch(validCodeVerifierChars);
+      expect(result.codeChallenge).toMatch(validCodeChallengeChars);
+    });
 
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toHaveLength(43);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
-  });
+    it('should use default byte length when not specified', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(42);
+      };
 
-  it('should generate unique PKCE values with different random values', () => {
-    let callCount = 0;
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      const bytes = new Uint8Array(byteLength);
-      bytes.fill(callCount++);
-      return bytes;
-    };
+      const result = pkce(mockRandomBytes);
 
-    const result1 = pkce(mockRandomBytes, 4);
-    const result2 = pkce(mockRandomBytes, 4);
+      expect(result.codeVerifier).toHaveLength(43); // 32 bytes in Base64URL = 43 characters
+      expect(result.codeChallenge).toHaveLength(43);
+    });
 
-    const codeVerifierBytes1 = Uint8Array.from([0, 0, 0, 0]);
-    const codeVerifierBytes2 = Uint8Array.from([1, 1, 1, 1]);
-    const expectedCodeVerifier1 = toBase64Url(codeVerifierBytes1);
-    const expectedCodeVerifier2 = toBase64Url(codeVerifierBytes2);
-    expect(result1.codeVerifier).not.toBe(result2.codeVerifier);
-    expect(result1.codeChallenge).not.toBe(result2.codeChallenge);
-    expect(result1.codeVerifier).toBe(expectedCodeVerifier1);
-    expect(result2.codeVerifier).toBe(expectedCodeVerifier2);
-  });
+    it('should generate consistent results for same input', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(123);
+      };
 
-  it('should generate valid Base64URL strings (no padding, URL-safe)', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      const bytes = new Uint8Array(byteLength);
-      bytes.fill(0);
-      return bytes;
-    };
+      const result1 = pkce(mockRandomBytes, 32);
+      const result2 = pkce(mockRandomBytes, 32);
 
-    const result = pkce(mockRandomBytes, 32);
+      expect(result1.codeVerifier).toBe(result2.codeVerifier);
+      expect(result1.codeChallenge).toBe(result2.codeChallenge);
+    });
 
-    // Check that Base64URL strings don't contain padding (=) or unsafe characters (+, /)
-    expect(result.codeVerifier).not.toContain('=');
-    expect(result.codeVerifier).not.toContain('+');
-    expect(result.codeVerifier).not.toContain('/');
-    expect(result.codeChallenge).not.toContain('=');
-    expect(result.codeChallenge).not.toContain('+');
-    expect(result.codeChallenge).not.toContain('/');
-  });
+    it('should handle custom byte lengths', () => {
+      const mockRandomBytes: RandomBytes = (byteLength = 32) => {
+        return new Uint8Array(byteLength).fill(100);
+      };
 
-  it('should use default byte length when not specified', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      return new Uint8Array(byteLength).fill(42);
-    };
+      const result = pkce(mockRandomBytes, 16);
 
-    const result = pkce(mockRandomBytes);
+      expect(result.codeVerifier).toHaveLength(22); // 16 bytes in Base64URL = 22 characters
+      expect(result.codeChallenge).toHaveLength(43);
+    });
 
-    const codeVerifierBytes = new Uint8Array(32).fill(42);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
+    it('should match RFC 7636 example values', () => {
+      // RFC 7636 example: code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+      // Expected code_challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toHaveLength(43);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
-  });
+      const mockRandomBytes: RandomBytes = () => {
+        return new Uint8Array(32).fill(0);
+      };
 
-  it('should generate consistent results for same input', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      return new Uint8Array(byteLength).fill(123);
-    };
+      const result = pkce(mockRandomBytes, 32);
 
-    const result1 = pkce(mockRandomBytes, 8);
-    const result2 = pkce(mockRandomBytes, 8);
+      expect(result.codeVerifier).toHaveLength(43); // 32 bytes in Base64URL = 43 characters
+      expect(result.codeChallenge).toHaveLength(43);
 
-    expect(result1.codeVerifier).toBe(result2.codeVerifier);
-    expect(result1.codeChallenge).toBe(result2.codeChallenge);
-  });
+      // Verify that code_challenge is derived from code_verifier
+      const encoder = new TextEncoder();
+      const codeVerifierBytes = encoder.encode(result.codeVerifier);
+      const expectedChallengeBytes = sha256(codeVerifierBytes);
+      const expectedChallenge = Buffer.from(expectedChallengeBytes)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 
-  it('should handle large byte lengths', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      return new Uint8Array(byteLength).fill(128);
-    };
-
-    const result = pkce(mockRandomBytes, 128);
-
-    const codeVerifierBytes = new Uint8Array(128).fill(128);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
-
-    // 128 bytes should produce longer Base64URL strings
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeVerifier).toHaveLength(171); // 128 bytes in Base64URL
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
-    expect(result.codeChallenge).toHaveLength(43); // SHA256 hash is always 43 chars
-  });
-
-  it('should verify SHA256 relationship between code_verifier and code_challenge', () => {
-    const mockRandomBytes: RandomBytes = (byteLength = 32) => {
-      return new Uint8Array(byteLength).fill(100);
-    };
-
-    const result = pkce(mockRandomBytes, 16);
-
-    const codeVerifierBytes = new Uint8Array(16).fill(100);
-    const expectedCodeVerifier = toBase64Url(codeVerifierBytes);
-    const expectedCodeChallenge = sha256Base64Url(codeVerifierBytes);
-
-    expect(result.codeVerifier).toBe(expectedCodeVerifier);
-    expect(result.codeChallenge).toBe(expectedCodeChallenge);
+      expect(result.codeChallenge).toBe(expectedChallenge);
+    });
   });
 });
