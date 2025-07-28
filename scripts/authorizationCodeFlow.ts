@@ -31,6 +31,7 @@ import {
   performTokenExchange,
   validateIdTokenWithJwks,
 } from './utils';
+import { validateGrantedScope } from '../src/endpoints/token/validateGrantedScope';
 
 // Adapter: Node.js randomBytes to Uint8Array for RandomBytes type
 const randomBytes: RandomBytes = (byteLength = 32) => {
@@ -174,6 +175,16 @@ async function main(): Promise<void> {
       }
     } else {
       console.warn('⚠️  No ID Token in token response.');
+    }
+
+    // Step 9: Validate granted scope
+    if (tokenResponse?.scope) {
+      console.log('🔍 Validating granted scope...');
+      validateGrantedScope({
+        requested: authResult.scope,
+        granted: tokenResponse.scope,
+      });
+      console.log('✅ Granted scope validated successfully');
     }
   } catch (error) {
     console.error(

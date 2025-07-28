@@ -21,10 +21,21 @@ export type AuthorizationRequestParams = {
   additionalParams?: Record<string, string>;
 };
 
+/**
+ * Result of generating an authorization request.
+ *
+ * @typedef {Object} GenerateAuthorizationRequestResult
+ * @property {URL} url - The complete authorization request URL.
+ * @property {string} codeVerifier - The code verifier used for PKCE.
+ * @property {string} state - The state parameter to maintain state between the request and callback.
+ * @property {string} scope - The scope included in the authorization request.
+ * @property {string | undefined} nonce - The nonce value for OpenID Connect requests, if applicable.
+ */
 type GenerateAuthorizationRequestResult = {
   url: URL;
   codeVerifier: string;
   state: string;
+  scope: string;
   nonce: string | undefined;
 };
 
@@ -86,5 +97,5 @@ export const generateAuthorizationRequest = (
     url.searchParams.set('nonce', nonce);
   }
 
-  return { url, codeVerifier, state, nonce };
+  return { url, codeVerifier, state, scope, nonce };
 };

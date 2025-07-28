@@ -32,6 +32,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result.codeVerifier).toBeDefined();
     expect(result.nonce).toBeDefined();
     expect(result.state).toBeDefined();
+    expect(result.scope).toBeDefined();
 
     // Verify nonce is properly set and matches the URL parameter
     expect(result.nonce).toBe(result.url.searchParams.get('nonce'));
@@ -40,6 +41,9 @@ describe('generateAuthorizationRequest', () => {
     // Verify state is properly set and matches the URL parameter
     expect(result.state).toBe(result.url.searchParams.get('state'));
     expect(result.state).toMatch(/^[A-Za-z0-9_-]+$/); // Base64URL format
+
+    // Verify scope is properly set
+    expect(result.scope).toBe('openid');
   });
 
   it('should generate nonce when scope includes openid among other scopes', () => {
@@ -51,6 +55,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result.nonce).toBeDefined();
     expect(result.nonce).toBe(result.url.searchParams.get('nonce'));
     expect(result.nonce).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(result.scope).toBe('openid email profile');
   });
 
   it('should generate nonce when openid is not the first scope', () => {
@@ -61,6 +66,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result.url.searchParams.get('nonce')).toBeDefined();
     expect(result.nonce).toBeDefined();
     expect(result.nonce).toBe(result.url.searchParams.get('nonce'));
+    expect(result.scope).toBe('email openid profile');
   });
 
   it('should not generate nonce when scope does not contain openid', () => {
@@ -70,6 +76,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result.url.searchParams.get('scope')).toBe('email profile address');
     expect(result.url.searchParams.get('nonce')).toBeNull();
     expect(result.nonce).toBeUndefined();
+    expect(result.scope).toBe('email profile address');
   });
 
   it('should generate different nonce values for different calls', () => {
@@ -159,6 +166,7 @@ describe('generateAuthorizationRequest', () => {
     expect(result1.codeVerifier).toBe(result2.codeVerifier);
     expect(result1.nonce).toBe(result2.nonce);
     expect(result1.state).toBe(result2.state);
+    expect(result1.scope).toBe(result2.scope);
   });
 
   it('should generate different URLs with different random values', () => {
@@ -182,6 +190,8 @@ describe('generateAuthorizationRequest', () => {
     expect(result1.codeVerifier).not.toBe(result2.codeVerifier);
     expect(result1.nonce).not.toBe(result2.nonce);
     expect(result1.state).not.toBe(result2.state);
+    // Scopes should be the same since they're based on the same input
+    expect(result1.scope).toBe(result2.scope);
   });
 
   it('should properly encode URL parameters', () => {
@@ -200,6 +210,7 @@ describe('generateAuthorizationRequest', () => {
     );
     expect(result.nonce).toBeDefined();
     expect(result.nonce).toBe(result.url.searchParams.get('nonce'));
+    expect(result.scope).toBe('openid email profile custom:scope');
   });
 
   it('should handle empty additional parameters', () => {
@@ -248,6 +259,65 @@ describe('generateAuthorizationRequest', () => {
 
     expect(result.url.searchParams.has('nonce')).toBe(false);
     expect(result.nonce).toBeUndefined();
+    expect(result.scope).toBe('email profile');
+  });
+
+  describe('scope validation', () => {
+    it('should handle single scope correctly', () => {
+      const config = { ...baseConfig, scope: 'openid' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('openid');
+    });
+
+    it('should handle multiple scopes correctly', () => {
+      const config = { ...baseConfig, scope: 'openid email profile address' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('openid email profile address');
+    });
+
+    it('should handle scopes with special characters', () => {
+      const config = { ...baseConfig, scope: 'openid custom:scope api:read' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('openid custom:scope api:read');
+    });
+
+    it('should handle empty scope string', () => {
+      const config = { ...baseConfig, scope: '' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('');
+    });
+
+    it('should handle scope with only whitespace', () => {
+      const config = { ...baseConfig, scope: '   ' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('   ');
+    });
+
+    it('should handle scope with multiple spaces between scopes', () => {
+      const config = { ...baseConfig, scope: 'openid  email   profile' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('openid  email   profile');
+    });
+
+    it('should handle scope with leading and trailing spaces', () => {
+      const config = { ...baseConfig, scope: '  openid email profile  ' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('  openid email profile  ');
+    });
+
+    it('should handle scope with tabs and newlines', () => {
+      const config = { ...baseConfig, scope: 'openid\temail\nprofile' };
+      const result = generateAuthorizationRequest(config, mockRandomBytes);
+
+      expect(result.scope).toBe('openid\temail\nprofile');
+    });
   });
 
   describe('nonce validation', () => {

@@ -16,6 +16,8 @@ export const tokenResponseSchema = z
     refresh_token: z.string().nullish(),
     /** The ID token, which contains claims about the authentication event */
     id_token: z.string().nullish(),
+    /** The scope of the access token */
+    scope: z.string().nullish(),
     /** Error code if the token request fails */
     error: z.string().nullish(),
     /** Human-readable text providing additional information about the error */
