@@ -24,6 +24,7 @@ export type AuthorizationRequestParams = {
 type GenerateAuthorizationRequestResult = {
   url: URL;
   codeVerifier: string;
+  state: string;
   nonce: string | undefined;
 };
 
@@ -85,5 +86,5 @@ export const generateAuthorizationRequest = (
     url.searchParams.set('nonce', nonce);
   }
 
-  return { url, codeVerifier, nonce };
+  return { url, codeVerifier, state, nonce };
 };

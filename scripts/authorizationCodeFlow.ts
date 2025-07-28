@@ -13,62 +13,28 @@
  * 4. Waits for manual authorization completion
  * 5. Extracts authorization code from redirect
  * 6. Provides instructions for token exchange
+ * 7. Validates ID token using JWKS
  */
 
-import { fetchOpenIdConfiguration } from '../src/endpoints/openid-configuration';
-import { generateAuthorizationRequest } from '../src/endpoints/authorization';
-import { verifyAuthorizationResponse } from '../src/endpoints/authorization/verifyAuthorizationResponse';
-import { createInterface } from 'node:readline';
 import { randomBytes as nodeRandomBytes } from 'crypto';
-import { config } from 'dotenv';
 import type { RandomBytes } from '../src/types';
-import { fetchToken } from '../src/endpoints/token/fetchToken';
+import {
+  loadEnvTest,
+  getDefaultValue,
+  question,
+  promptWithDefault,
+  promptForAdditionalParams,
+  rl,
+  fetchAndDisplayOpenIdConfig,
+  generateAndDisplayAuthRequest,
+  processRedirectUrl,
+  performTokenExchange,
+  validateIdTokenWithJwks,
+} from './utils';
 
 // Adapter: Node.js randomBytes to Uint8Array for RandomBytes type
 const randomBytes: RandomBytes = (byteLength = 32) => {
   return new Uint8Array(nodeRandomBytes(byteLength));
-};
-
-// Create readline interface
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
-// Helper function to prompt for input
-const question = (query: string): Promise<string> => {
-  return new Promise((resolve) => {
-    rl.question(query, resolve);
-  });
-};
-
-/**
- * Loads environment variables from .env.test file using dotenv
- */
-const loadEnvTest = (): Record<string, string> => {
-  try {
-    const result = config({ path: '.env.test' });
-    if (result.error) {
-      console.warn('⚠️  Warning: Could not load .env.test file:', result.error);
-      return {};
-    }
-
-    // Return the loaded environment variables
-    return result.parsed || {};
-  } catch (error) {
-    console.warn('⚠️  Warning: Could not read .env.test file:', error);
-    return {};
-  }
-};
-
-/**
- * Gets default value for a parameter, prioritizing .env.test over process.env
- */
-const getDefaultValue = (
-  key: string,
-  envTest: Record<string, string>
-): string => {
-  return envTest[key] || process.env[key] || '';
 };
 
 async function main(): Promise<void> {
@@ -91,66 +57,34 @@ async function main(): Promise<void> {
   try {
     // Step 1: Get issuer URL
     const defaultIssuer = getDefaultValue('TEST_ISSUER', envTest);
-    const issuer =
-      (await question(
-        `Issuer URL${defaultIssuer ? ` (default: ${defaultIssuer})` : ''}: `
-      )) || defaultIssuer;
+    const issuer = await promptWithDefault('Issuer URL', defaultIssuer);
 
     if (!issuer) {
       console.error('❌ Issuer URL is required');
       return;
     }
 
-    console.log(`\n📡 Fetching OpenID Configuration from: ${issuer}`);
-
     // Step 2: Fetch OpenID Configuration
-    const openIdConfig = await fetchOpenIdConfiguration(issuer);
-    console.log('✅ OpenID Configuration fetched successfully');
-    console.log(
-      `   Authorization Endpoint: ${openIdConfig.authorization_endpoint}`
-    );
-    console.log(`   Token Endpoint: ${openIdConfig.token_endpoint}`);
-    console.log(`   Issuer: ${openIdConfig.issuer}\n`);
+    const openIdConfig = await fetchAndDisplayOpenIdConfig(issuer);
 
     // Step 3: Get client configuration
     const defaultClientId = getDefaultValue('CLIENT_ID', envTest);
-    const clientId =
-      (await question(
-        `Client ID${defaultClientId ? ` (default: ${defaultClientId})` : ''}: `
-      )) || defaultClientId;
+    const clientId = await promptWithDefault('Client ID', defaultClientId);
 
     const defaultRedirectUri = getDefaultValue('REDIRECT_URI', envTest);
-    const redirectUri =
-      (await question(
-        `Redirect URI${
-          defaultRedirectUri ? ` (default: ${defaultRedirectUri})` : ''
-        }: `
-      )) || defaultRedirectUri;
+    const redirectUri = await promptWithDefault(
+      'Redirect URI',
+      defaultRedirectUri
+    );
 
-    const scope = (await question('Scope (default: openid): ')) || 'openid';
-    const responseType =
-      (await question('Response Type (default: code): ')) || 'code';
+    const scope = await promptWithDefault('Scope', 'openid');
+    const responseType = await promptWithDefault('Response Type', 'code');
 
     console.log(
       '\nℹ️  PKCE and state parameters are automatically generated (OAuth 2.1 compliance)'
     );
 
-    const additionalParams: Record<string, string> = {};
-    const addMore = await question(
-      '\nAdd additional parameters? (y/n, default: n): '
-    );
-
-    if (addMore.toLowerCase() === 'y') {
-      while (true) {
-        const paramName = await question(
-          'Parameter name (or press Enter to finish): '
-        );
-        if (!paramName) break;
-
-        const paramValue = await question(`Value for ${paramName}: `);
-        additionalParams[paramName] = paramValue;
-      }
-    }
+    const additionalParams = await promptForAdditionalParams();
 
     // Step 4: Generate authorization request
     const authParams = {
@@ -162,44 +96,7 @@ async function main(): Promise<void> {
       additionalParams,
     };
 
-    const authResult = generateAuthorizationRequest(authParams, randomBytes);
-    const expectedState = authResult.url.searchParams.get('state')!;
-
-    // Debug: Verify PKCE calculation
-    console.log('\n🔍 PKCE Verification:');
-    console.log(
-      'Code Challenge (from auth request):',
-      authResult.url.searchParams.get('code_challenge')
-    );
-    console.log('Code Verifier:', authResult.codeVerifier);
-    console.log('Code Verifier Length:', authResult.codeVerifier.length);
-    console.log(
-      'RFC 7636 Compliant (43-128 chars):',
-      authResult.codeVerifier.length >= 43 &&
-        authResult.codeVerifier.length <= 128
-    );
-
-    // Output authorization URL
-    console.log('\n' + '='.repeat(80));
-    console.log('🔗 AUTHORIZATION REQUEST URL');
-    console.log('='.repeat(80));
-    console.log(authResult.url.toString());
-    console.log('\n' + '='.repeat(80));
-
-    console.log('📝 State parameter (for verification):');
-    console.log(expectedState);
-    console.log('');
-
-    console.log('🔐 PKCE Code Verifier (for token exchange):');
-    console.log(authResult.codeVerifier);
-    console.log('');
-
-    console.log('💡 Instructions:');
-    console.log('1. Copy the URL above and paste it into your browser');
-    console.log('2. Complete the authorization (login, consent, etc.)');
-    console.log('3. You will be redirected to your redirect URI');
-    console.log('4. Copy the entire redirected URL from your browser');
-    console.log('5. Paste it below\n');
+    const authResult = generateAndDisplayAuthRequest(authParams, randomBytes);
 
     // Step 5: Wait for manual authorization result
     const redirectUrl = await question('Enter the redirected URL: ');
@@ -209,76 +106,74 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Step 6: Extract authorization result using verifyAuthorizationResponse
-    console.log('\n🔍 Analyzing redirect result...');
-    try {
-      const code = verifyAuthorizationResponse(redirectUrl, {
-        state: expectedState,
-        issuer: openIdConfig.original_issuer ?? openIdConfig.issuer,
-        clientId,
-        redirectUri,
-      });
-      // Step 7: Instructions for token exchange
-      if (code) {
-        console.log('\n' + '='.repeat(80));
-        console.log('🔄 TOKEN EXCHANGE');
-        console.log('='.repeat(80));
-        console.log(`Token Endpoint: ${openIdConfig.token_endpoint}`);
-        console.log(`Authorization Code: ${code}`);
-        console.log(`Code Verifier: ${authResult.codeVerifier}`);
-        console.log(`Client ID: ${clientId}`);
-        console.log(`Redirect URI: ${redirectUri}`);
-        console.log('='.repeat(80));
+    // Step 6: Extract authorization result
+    const { code, error: redirectError } = processRedirectUrl(
+      redirectUrl,
+      authResult,
+      openIdConfig,
+      clientId,
+      redirectUri
+    );
 
-        // Use fetchToken to exchange code for tokens
-        try {
-          console.log('\n🔍 Token Request Debug:');
-          console.log('Request Body:');
-          const body = new URLSearchParams({
-            grant_type: 'authorization_code',
-            code,
-            code_verifier: authResult.codeVerifier,
-            redirect_uri: redirectUri,
-            client_id: clientId,
-          });
-          console.log(body.toString());
-          console.log('');
-
-          const tokenResponse = await fetchToken({
-            tokenEndpoint: openIdConfig.token_endpoint,
-            clientId,
-            clientSecret: envTest['CLIENT_SECRET'],
-            // clientSecret is not used in PKCE public clients, but you can add logic to prompt if needed
-            code,
-            codeVerifier: authResult.codeVerifier,
-            redirectUri,
-            grantType: 'authorization_code',
-          });
-          console.log('\n✅ Token Response:');
-          console.log(JSON.stringify(tokenResponse, undefined, 2));
-        } catch (tokenError) {
-          console.error('\n❌ Token exchange failed:');
-          if (tokenError instanceof Error) {
-            console.error('   ' + tokenError.message);
-          } else {
-            console.error('   ' + String(tokenError));
-          }
-        }
-      } else {
-        console.log(
-          '\n❌ No authorization code received. Token exchange cannot proceed.'
-        );
-      }
-    } catch (error) {
+    if (redirectError) {
       console.log('\n❌ Error analyzing redirect result:');
-      if (error instanceof Error) {
-        console.log('   ' + error.message);
+      if (redirectError instanceof Error) {
+        console.log('   ' + redirectError.message);
       } else {
-        console.log('   ' + String(error));
+        console.log('   ' + String(redirectError));
       }
       console.log(
         '\n⚠️  No authorization code received. Token exchange cannot proceed.'
       );
+      return;
+    }
+
+    if (!code) {
+      console.log(
+        '\n❌ No authorization code received. Token exchange cannot proceed.'
+      );
+      return;
+    }
+
+    // Step 7: Perform token exchange
+    const { tokenResponse, error: tokenError } = await performTokenExchange(
+      code,
+      authResult,
+      openIdConfig,
+      clientId,
+      redirectUri,
+      envTest['CLIENT_SECRET']
+    );
+
+    if (tokenError) {
+      console.error('\n❌ Token exchange failed:');
+      if (tokenError instanceof Error) {
+        console.error('   ' + tokenError.message);
+      } else {
+        console.error('   ' + String(tokenError));
+      }
+      return;
+    }
+
+    // Step 8: Validate ID Token using JWKS
+    if (tokenResponse?.id_token) {
+      const { success, error: validationError } = await validateIdTokenWithJwks(
+        tokenResponse.id_token,
+        authResult,
+        openIdConfig,
+        clientId
+      );
+
+      if (!success) {
+        console.error('❌ ID Token validation failed:');
+        if (validationError instanceof Error) {
+          console.error('   ' + validationError.message);
+        } else {
+          console.error('   ' + String(validationError));
+        }
+      }
+    } else {
+      console.warn('⚠️  No ID Token in token response.');
     }
   } catch (error) {
     console.error(

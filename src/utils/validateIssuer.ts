@@ -16,8 +16,8 @@ export const validateIssuer = ({
   receivedIssuer,
   expectedIssuer,
 }: ValidateIssuerParams) => {
-  const normalizedReceived = receivedIssuer.replace(/\/$/, '');
-  const normalizedExpected = expectedIssuer.replace(/\/$/, '');
+  const normalizedReceived = receivedIssuer.replace(/\/+$/, '');
+  const normalizedExpected = expectedIssuer.replace(/\/+$/, '');
 
   if (normalizedReceived !== normalizedExpected) {
     throw new Error(

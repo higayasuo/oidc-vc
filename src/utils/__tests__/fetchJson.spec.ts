@@ -62,6 +62,7 @@ describe('fetchJson', () => {
       ok: false,
       status: 404,
       statusText: 'Not Found',
+      text: vi.fn().mockResolvedValue('Error response body'),
     };
     (global.fetch as any).mockResolvedValue(mockResponse);
 
