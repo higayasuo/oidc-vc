@@ -1,3 +1,4 @@
+import { validateLeftMostHalfHash } from '@/utils/validateLeftMostHalfHash';
 import { getJwk } from '../jwks/getJwk';
 import { Jwk } from '../jwks/JwksResponse';
 import {
@@ -16,6 +17,7 @@ import {
  * @property {string} issuer - The expected issuer of the token.
  * @property {string} audience - The expected audience of the token.
  * @property {string} nonce - The nonce value that was sent in the authorization request to prevent CSRF attacks.
+ * @property {string} state - The state value that was sent in the authorization request to prevent CSRF attacks and validate s_hash.
  * @property {number} [clockTolerance] - Clock tolerance in seconds for time-based claims. Defaults to 30 seconds.
  */
 type ValidateIdTokenParams = {
@@ -24,6 +26,7 @@ type ValidateIdTokenParams = {
   issuer: string;
   audience: string;
   nonce: string;
+  state: string;
   clockTolerance?: number;
 };
 
@@ -40,12 +43,13 @@ type ValidateIdTokenResult = {
 };
 
 /**
- * Validates an ID token using the provided JWKS, issuer, audience, and nonce.
+ * Validates an ID token using the provided JWKS, issuer, audience, nonce, and state.
  * This function performs comprehensive OIDC ID token validation including:
  * - Automatic JWK selection based on the token's kid (key ID)
  * - Signature verification using the selected JWK
  * - Required claims validation (iss, aud, iat, sub)
  * - Nonce validation to prevent CSRF attacks
+ * - State validation through s_hash (state hash) when present
  * - Time-based claims validation with configurable tolerance (handled by jose)
  * - Issuer and audience validation
  *
@@ -53,9 +57,14 @@ type ValidateIdTokenResult = {
  * JWK from the provided JWKS array. If no kid is present and there's exactly one JWK in the
  * array, that JWK will be used. Otherwise, an error will be thrown.
  *
+ * When the ID token contains an s_hash claim, it validates that the hash matches the
+ * left-most half of the SHA hash of the state parameter using the token's signing algorithm.
+ * This provides additional CSRF protection by ensuring the state parameter hasn't been
+ * tampered with during the authorization flow.
+ *
  * @param {ValidateIdTokenParams} params - The parameters required for token validation.
  * @returns {Promise<ValidateIdTokenResult>} A promise that resolves to the validation result, containing the token's payload and protected header.
- * @throws Will throw an error if the token is invalid, expired, missing required claims, nonce mismatch, or if no suitable JWK can be found in the JWKS.
+ * @throws Will throw an error if the token is invalid, expired, missing required claims, nonce mismatch, s_hash validation fails, or if no suitable JWK can be found in the JWKS.
  */
 export const validateIdToken = async ({
   idToken,
@@ -63,11 +72,17 @@ export const validateIdToken = async ({
   issuer,
   audience,
   nonce,
+  state,
   clockTolerance = 30,
 }: ValidateIdTokenParams): Promise<ValidateIdTokenResult> => {
   try {
     // Decode the token to get the header
-    const { kid } = decodeProtectedHeader(idToken);
+    const { kid, alg } = decodeProtectedHeader(idToken);
+
+    if (!alg) {
+      throw new Error('ID token is missing the "alg" (algorithm) header');
+    }
+
     const publicKey = getJwk(jwks, kid);
 
     const result = await jwtVerify(idToken, publicKey, {
@@ -100,6 +115,14 @@ export const validateIdToken = async ({
       throw new Error(
         `ID token nonce "${payload.nonce}" does not match expected value "${nonce}"`
       );
+    }
+
+    if (payload.s_hash) {
+      validateLeftMostHalfHash({
+        hash: payload.s_hash,
+        data: state,
+        alg,
+      });
     }
 
     return result;

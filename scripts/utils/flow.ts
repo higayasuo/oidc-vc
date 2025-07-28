@@ -145,37 +145,39 @@ export const performTokenExchange = async (
 /**
  * Validates ID token using JWKS
  */
-export const validateIdTokenWithJwks = async (
-  idToken: string,
+export const validateIdTokenWithJwks = async (params: {
+  idToken: string;
   authResult: {
     nonce: string | undefined;
-  },
+    state: string;
+  };
   openIdConfig: {
     jwks_uri?: string;
     original_issuer?: string | null;
     issuer: string;
-  },
-  clientId: string
-) => {
-  if (!openIdConfig.jwks_uri) {
+  };
+  clientId: string;
+}) => {
+  if (!params.openIdConfig.jwks_uri) {
     console.warn('⚠️  No JWKS URI found in OpenID Configuration');
     return { success: false, error: 'No JWKS URI found' };
   }
 
   console.log('\n🔍 Validating ID Token...');
-  console.log(`📡 Fetching JWKS from: ${openIdConfig.jwks_uri}`);
+  console.log(`📡 Fetching JWKS from: ${params.openIdConfig.jwks_uri}`);
 
   try {
-    const jwks = await fetchJwks(openIdConfig.jwks_uri);
+    const jwks = await fetchJwks(params.openIdConfig.jwks_uri);
     console.log(`✅ Fetched ${jwks.length} JWK(s)`);
 
     console.log('🔍 Validating ID token...');
     const validationResult = await validateIdToken({
-      idToken,
+      idToken: params.idToken,
       jwks,
-      issuer: openIdConfig.original_issuer ?? openIdConfig.issuer,
-      audience: clientId,
-      nonce: authResult.nonce!,
+      issuer: params.openIdConfig.original_issuer ?? params.openIdConfig.issuer,
+      audience: params.clientId,
+      nonce: params.authResult.nonce!,
+      state: params.authResult.state,
     });
 
     console.log('✅ ID Token validated successfully!');

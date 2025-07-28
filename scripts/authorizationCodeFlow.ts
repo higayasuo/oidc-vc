@@ -159,10 +159,12 @@ async function main(): Promise<void> {
     // Step 8: Validate ID Token using JWKS
     if (tokenResponse?.id_token) {
       const { success, error: validationError } = await validateIdTokenWithJwks(
-        tokenResponse.id_token,
-        authResult,
-        openIdConfig,
-        clientId
+        {
+          idToken: tokenResponse.id_token,
+          authResult,
+          openIdConfig,
+          clientId,
+        }
       );
 
       if (!success) {
