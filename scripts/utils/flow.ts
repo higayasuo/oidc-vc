@@ -62,84 +62,76 @@ export const generateAndDisplayAuthRequest = (
 };
 
 /**
- * Processes the redirect URL and extracts authorization code
+ * Verifies the redirected URL and extracts authorization code
  */
-export const processRedirectUrl = (
-  redirectUrl: string,
+export const verifyRedirectedUri = (params: {
+  redirectedUri: string;
   authResult: {
     state: string;
     nonce: string | undefined;
-  },
+  };
   openIdConfig: {
     original_issuer?: string | null;
     issuer: string;
-  },
-  clientId: string,
-  redirectUri: string
-) => {
+  };
+  clientId: string;
+  redirectUri: string;
+}): string => {
   console.log('\n🔍 Analyzing redirect result...');
 
-  try {
-    const code = verifyAuthorizationResponse(redirectUrl, {
-      state: authResult.state,
-      issuer: openIdConfig.original_issuer ?? openIdConfig.issuer,
-      clientId,
-      redirectUri,
-    });
+  const code = verifyAuthorizationResponse(params.redirectedUri, {
+    state: params.authResult.state,
+    issuer: params.openIdConfig.original_issuer ?? params.openIdConfig.issuer,
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+  });
 
-    return { code, error: null };
-  } catch (error) {
-    return { code: null, error };
-  }
+  return code;
 };
 
 /**
  * Performs token exchange and displays results
  */
-export const performTokenExchange = async (
-  code: string,
+export const performTokenExchange = async (params: {
+  code: string;
   authResult: {
     codeVerifier: string;
     nonce: string | undefined;
-  },
+  };
   openIdConfig: {
     token_endpoint: string;
     original_issuer?: string | null;
     issuer: string;
     jwks_uri?: string;
-  },
-  clientId: string,
-  redirectUri: string,
-  clientSecret?: string
-) => {
+  };
+  clientId: string;
+  redirectUri: string;
+  clientSecret?: string;
+}) => {
   console.log('\n' + '='.repeat(80));
   console.log('🔄 TOKEN EXCHANGE');
   console.log('='.repeat(80));
-  console.log(`Token Endpoint: ${openIdConfig.token_endpoint}`);
-  console.log(`Authorization Code: ${code}`);
-  console.log(`Code Verifier: ${authResult.codeVerifier}`);
-  console.log(`Client ID: ${clientId}`);
-  console.log(`Redirect URI: ${redirectUri}`);
+  console.log(`Token Endpoint: ${params.openIdConfig.token_endpoint}`);
+  console.log(`Authorization Code: ${params.code}`);
+  console.log(`Code Verifier: ${params.authResult.codeVerifier}`);
+  console.log(`Client ID: ${params.clientId}`);
+  console.log(`Redirect URI: ${params.redirectUri}`);
   console.log('='.repeat(80));
 
-  try {
-    const tokenResponse = await fetchToken({
-      tokenEndpoint: openIdConfig.token_endpoint,
-      clientId,
-      clientSecret,
-      code,
-      codeVerifier: authResult.codeVerifier,
-      redirectUri,
-      grantType: 'authorization_code',
-    });
+  const tokenResponse = await fetchToken({
+    tokenEndpoint: params.openIdConfig.token_endpoint,
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+    code: params.code,
+    codeVerifier: params.authResult.codeVerifier,
+    redirectUri: params.redirectUri,
+    grantType: 'authorization_code',
+  });
 
-    console.log('\n✅ Token Response:');
-    console.log(JSON.stringify(tokenResponse, undefined, 2));
+  console.log('\n✅ Token Response:');
+  console.log(JSON.stringify(tokenResponse, undefined, 2));
 
-    return { tokenResponse, error: null };
-  } catch (error) {
-    return { tokenResponse: null, error };
-  }
+  return tokenResponse;
 };
 
 /**
@@ -159,33 +151,28 @@ export const validateIdTokenWithJwks = async (params: {
   clientId: string;
 }) => {
   if (!params.openIdConfig.jwks_uri) {
-    console.warn('⚠️  No JWKS URI found in OpenID Configuration');
-    return { success: false, error: 'No JWKS URI found' };
+    throw new Error('No JWKS URI found in OpenID Configuration');
   }
 
   console.log('\n🔍 Validating ID Token...');
   console.log(`📡 Fetching JWKS from: ${params.openIdConfig.jwks_uri}`);
 
-  try {
-    const jwks = await fetchJwks(params.openIdConfig.jwks_uri);
-    console.log(`✅ Fetched ${jwks.length} JWK(s)`);
+  const jwks = await fetchJwks(params.openIdConfig.jwks_uri);
+  console.log(`✅ Fetched ${jwks.length} JWK(s)`);
 
-    console.log('🔍 Validating ID token...');
-    const validationResult = await validateIdToken({
-      idToken: params.idToken,
-      jwks,
-      issuer: params.openIdConfig.original_issuer ?? params.openIdConfig.issuer,
-      audience: params.clientId,
-      nonce: params.authResult.nonce!,
-      state: params.authResult.state,
-    });
+  console.log('🔍 Validating ID token...');
+  const validationResult = await validateIdToken({
+    idToken: params.idToken,
+    jwks,
+    issuer: params.openIdConfig.original_issuer ?? params.openIdConfig.issuer,
+    audience: params.clientId,
+    nonce: params.authResult.nonce!,
+    state: params.authResult.state,
+  });
 
-    console.log('✅ ID Token validated successfully!');
-    console.log('📋 Token Claims:');
-    console.log(JSON.stringify(validationResult.payload, null, 2));
+  console.log('✅ ID Token validated successfully!');
+  console.log('📋 Token Claims:');
+  console.log(JSON.stringify(validationResult.payload, null, 2));
 
-    return { success: true, validationResult };
-  } catch (error) {
-    return { success: false, error };
-  }
+  return validationResult;
 };

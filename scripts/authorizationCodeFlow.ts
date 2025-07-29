@@ -27,11 +27,12 @@ import {
   rl,
   fetchAndDisplayOpenIdConfig,
   generateAndDisplayAuthRequest,
-  processRedirectUrl,
+  verifyRedirectedUri,
   performTokenExchange,
   validateIdTokenWithJwks,
 } from './utils';
 import { validateGrantedScope } from '../src/endpoints/token/validateGrantedScope';
+import { getErrorMessage } from '../src/utils/getErrorMessage';
 
 // Adapter: Node.js randomBytes to Uint8Array for RandomBytes type
 const randomBytes: RandomBytes = (byteLength = 32) => {
@@ -100,80 +101,68 @@ async function main(): Promise<void> {
     const authResult = generateAndDisplayAuthRequest(authParams, randomBytes);
 
     // Step 5: Wait for manual authorization result
-    const redirectUrl = await question('Enter the redirected URL: ');
+    const redirectedUri = await question('Enter the redirected URI: ');
 
-    if (!redirectUrl.trim()) {
+    if (!redirectedUri.trim()) {
       console.log('\n⚠️  No redirect URL provided. Exiting.');
       return;
     }
 
     // Step 6: Extract authorization result
-    const { code, error: redirectError } = processRedirectUrl(
-      redirectUrl,
-      authResult,
-      openIdConfig,
-      clientId,
-      redirectUri
-    );
+    let code: string;
+    try {
+      code = verifyRedirectedUri({
+        redirectedUri,
+        authResult,
+        openIdConfig,
+        clientId,
+        redirectUri,
+      });
 
-    if (redirectError) {
-      console.log('\n❌ Error analyzing redirect result:');
-      if (redirectError instanceof Error) {
-        console.log('   ' + redirectError.message);
-      } else {
-        console.log('   ' + String(redirectError));
+      if (!code) {
+        console.log(
+          '\n❌ No authorization code received. Token exchange cannot proceed.'
+        );
+        return;
       }
+    } catch (redirectError) {
+      console.log('\n❌ Error analyzing redirect result:');
+      console.log('   ' + getErrorMessage(redirectError));
       console.log(
         '\n⚠️  No authorization code received. Token exchange cannot proceed.'
       );
       return;
     }
 
-    if (!code) {
-      console.log(
-        '\n❌ No authorization code received. Token exchange cannot proceed.'
-      );
-      return;
-    }
-
     // Step 7: Perform token exchange
-    const { tokenResponse, error: tokenError } = await performTokenExchange(
-      code,
-      authResult,
-      openIdConfig,
-      clientId,
-      redirectUri,
-      envTest['CLIENT_SECRET']
-    );
-
-    if (tokenError) {
+    let tokenResponse;
+    try {
+      tokenResponse = await performTokenExchange({
+        code,
+        authResult,
+        openIdConfig,
+        clientId,
+        redirectUri,
+        clientSecret: envTest['CLIENT_SECRET'],
+      });
+    } catch (tokenError) {
       console.error('\n❌ Token exchange failed:');
-      if (tokenError instanceof Error) {
-        console.error('   ' + tokenError.message);
-      } else {
-        console.error('   ' + String(tokenError));
-      }
+      console.error('   ' + getErrorMessage(tokenError));
       return;
     }
 
     // Step 8: Validate ID Token using JWKS
     if (tokenResponse?.id_token) {
-      const { success, error: validationError } = await validateIdTokenWithJwks(
-        {
+      try {
+        const validationResult = await validateIdTokenWithJwks({
           idToken: tokenResponse.id_token,
           authResult,
           openIdConfig,
           clientId,
-        }
-      );
-
-      if (!success) {
+        });
+      } catch (validationError) {
         console.error('❌ ID Token validation failed:');
-        if (validationError instanceof Error) {
-          console.error('   ' + validationError.message);
-        } else {
-          console.error('   ' + String(validationError));
-        }
+        console.error('   ' + getErrorMessage(validationError));
       }
     } else {
       console.warn('⚠️  No ID Token in token response.');
@@ -189,15 +178,10 @@ async function main(): Promise<void> {
       console.log('✅ Granted scope validated successfully');
     }
   } catch (error) {
-    console.error(
-      '❌ Error in authorization flow:',
-      error instanceof Error ? error.message : String(error)
-    );
+    console.error('❌ Error in authorization flow:');
+    console.error('   ' + getErrorMessage(error));
     if (error instanceof Error && error.cause) {
-      console.error(
-        '   Cause:',
-        error.cause instanceof Error ? error.cause.message : String(error.cause)
-      );
+      console.error('   Cause: ' + getErrorMessage(error.cause));
     }
     process.exit(1);
   } finally {
