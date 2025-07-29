@@ -20,18 +20,15 @@ import { randomBytes as nodeRandomBytes } from 'crypto';
 import type { RandomBytes } from '../src/types';
 import {
   loadEnvTest,
-  getDefaultValue,
   question,
-  promptWithDefault,
-  promptForAdditionalParams,
   rl,
   fetchAndDisplayOpenIdConfig,
   generateAndDisplayAuthRequest,
   verifyRedirectedUri,
   performTokenExchange,
-  validateIdTokenWithJwks,
+  validateTokenResponseWithJwks,
 } from './utils';
-import { validateGrantedScope } from '../src/endpoints/token/validateGrantedScope';
+import { collectAuthorizationParams } from './utils/cli';
 import { getErrorMessage } from '../src/utils/getErrorMessage';
 
 // Adapter: Node.js randomBytes to Uint8Array for RandomBytes type
@@ -57,36 +54,18 @@ async function main(): Promise<void> {
   }
 
   try {
-    // Step 1: Get issuer URL
-    const defaultIssuer = getDefaultValue('TEST_ISSUER', envTest);
-    const issuer = await promptWithDefault('Issuer URL', defaultIssuer);
-
-    if (!issuer) {
-      console.error('❌ Issuer URL is required');
-      return;
-    }
+    // Step 1: Collect authorization parameters
+    const {
+      issuer,
+      clientId,
+      redirectUri,
+      scope,
+      responseType,
+      additionalParams,
+    } = await collectAuthorizationParams(envTest);
 
     // Step 2: Fetch OpenID Configuration
     const openIdConfig = await fetchAndDisplayOpenIdConfig(issuer);
-
-    // Step 3: Get client configuration
-    const defaultClientId = getDefaultValue('CLIENT_ID', envTest);
-    const clientId = await promptWithDefault('Client ID', defaultClientId);
-
-    const defaultRedirectUri = getDefaultValue('REDIRECT_URI', envTest);
-    const redirectUri = await promptWithDefault(
-      'Redirect URI',
-      defaultRedirectUri
-    );
-
-    const scope = await promptWithDefault('Scope', 'openid');
-    const responseType = await promptWithDefault('Response Type', 'code');
-
-    console.log(
-      '\nℹ️  PKCE and state parameters are automatically generated (OAuth 2.1 compliance)'
-    );
-
-    const additionalParams = await promptForAdditionalParams();
 
     // Step 4: Generate authorization request
     const authParams = {
@@ -151,31 +130,20 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Step 8: Validate ID Token using JWKS
-    if (tokenResponse?.id_token) {
+    // Step 8: Validate token response (scope and ID token)
+    if (tokenResponse) {
       try {
-        const validationResult = await validateIdTokenWithJwks({
-          idToken: tokenResponse.id_token,
+        await validateTokenResponseWithJwks({
+          tokenResponse,
+          requestedScope: authResult.scope,
           authResult,
           openIdConfig,
           clientId,
         });
       } catch (validationError) {
-        console.error('❌ ID Token validation failed:');
+        console.error('❌ Token response validation failed:');
         console.error('   ' + getErrorMessage(validationError));
       }
-    } else {
-      console.warn('⚠️  No ID Token in token response.');
-    }
-
-    // Step 9: Validate granted scope
-    if (tokenResponse?.scope) {
-      console.log('🔍 Validating granted scope...');
-      validateGrantedScope({
-        requested: authResult.scope,
-        granted: tokenResponse.scope,
-      });
-      console.log('✅ Granted scope validated successfully');
     }
   } catch (error) {
     console.error('❌ Error in authorization flow:');

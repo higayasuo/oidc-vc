@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline';
+import { getDefaultValue } from './env';
 
 // Create readline interface
 export const rl = createInterface({
@@ -50,4 +51,47 @@ export const promptForAdditionalParams = async (): Promise<
   }
 
   return additionalParams;
+};
+
+/**
+ * Collects authorization parameters from user input
+ */
+export const collectAuthorizationParams = async (
+  envTest: Record<string, string>
+) => {
+  // Step 1: Get issuer URL
+  const defaultIssuer = getDefaultValue('TEST_ISSUER', envTest);
+  const issuer = await promptWithDefault('Issuer URL', defaultIssuer);
+
+  if (!issuer) {
+    throw new Error('Issuer URL is required');
+  }
+
+  // Step 2: Get client configuration
+  const defaultClientId = getDefaultValue('CLIENT_ID', envTest);
+  const clientId = await promptWithDefault('Client ID', defaultClientId);
+
+  const defaultRedirectUri = getDefaultValue('REDIRECT_URI', envTest);
+  const redirectUri = await promptWithDefault(
+    'Redirect URI',
+    defaultRedirectUri
+  );
+
+  const scope = await promptWithDefault('Scope', 'openid');
+  const responseType = await promptWithDefault('Response Type', 'code');
+
+  console.log(
+    '\nℹ️  PKCE and state parameters are automatically generated (OAuth 2.1 compliance)'
+  );
+
+  const additionalParams = await promptForAdditionalParams();
+
+  return {
+    issuer,
+    clientId,
+    redirectUri,
+    scope,
+    responseType,
+    additionalParams,
+  };
 };

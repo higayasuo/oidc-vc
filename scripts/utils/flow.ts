@@ -3,8 +3,10 @@ import { generateAuthorizationRequest } from '../../src/endpoints/authorization'
 import { verifyAuthorizationResponse } from '../../src/endpoints/authorization/verifyAuthorizationResponse';
 import { fetchToken } from '../../src/endpoints/token/fetchToken';
 import { validateIdToken } from '../../src/endpoints/token/validateIdToken';
+import { validateTokenResponse } from '../../src/endpoints/token/validateTokenResponse';
 import { fetchJwks } from '../../src/endpoints/jwks/fetchJwks';
 import type { RandomBytes } from '../../src/types';
+import type { Jwk } from '../../src/endpoints/jwks/JwksResponse';
 
 /**
  * Fetches OpenID Configuration and displays the results
@@ -135,44 +137,54 @@ export const performTokenExchange = async (params: {
 };
 
 /**
- * Validates ID token using JWKS
+ * Validates token response by checking both scope and ID token
  */
-export const validateIdTokenWithJwks = async (params: {
-  idToken: string;
+export const validateTokenResponseWithJwks = async (params: {
+  tokenResponse: any;
+  requestedScope: string;
   authResult: {
     nonce: string | undefined;
     state: string;
   };
   openIdConfig: {
-    jwks_uri?: string;
-    original_issuer?: string | null;
     issuer: string;
+    jwks_uri?: string;
   };
   clientId: string;
 }) => {
-  if (!params.openIdConfig.jwks_uri) {
-    throw new Error('No JWKS URI found in OpenID Configuration');
+  console.log('\n' + '='.repeat(80));
+  console.log('🔍 TOKEN RESPONSE VALIDATION');
+  console.log('='.repeat(80));
+
+  // Fetch JWKS for ID token validation
+  let jwks: Jwk[] = [];
+  if (params.tokenResponse.id_token && params.openIdConfig.jwks_uri) {
+    console.log(`📡 Fetching JWKS from: ${params.openIdConfig.jwks_uri}`);
+    jwks = await fetchJwks(params.openIdConfig.jwks_uri);
+    console.log(`✅ Fetched ${jwks.length} JWK(s)`);
   }
 
-  console.log('\n🔍 Validating ID Token...');
-  console.log(`📡 Fetching JWKS from: ${params.openIdConfig.jwks_uri}`);
-
-  const jwks = await fetchJwks(params.openIdConfig.jwks_uri);
-  console.log(`✅ Fetched ${jwks.length} JWK(s)`);
-
-  console.log('🔍 Validating ID token...');
-  const validationResult = await validateIdToken({
-    idToken: params.idToken,
+  const validationResult = await validateTokenResponse({
+    tokenResponse: params.tokenResponse,
+    requestedScope: params.requestedScope,
     jwks,
-    issuer: params.openIdConfig.original_issuer ?? params.openIdConfig.issuer,
+    issuer: params.openIdConfig.issuer,
     audience: params.clientId,
     nonce: params.authResult.nonce!,
     state: params.authResult.state,
   });
 
-  console.log('✅ ID Token validated successfully!');
-  console.log('📋 Token Claims:');
-  console.log(JSON.stringify(validationResult.payload, null, 2));
+  if (validationResult) {
+    console.log('✅ Token response validated successfully');
+    console.log('📋 ID Token Claims:');
+    console.log(JSON.stringify(validationResult.payload, null, 2));
+  } else {
+    console.log(
+      '✅ Token response validated successfully (no ID token present)'
+    );
+  }
+
+  console.log('='.repeat(80));
 
   return validationResult;
 };

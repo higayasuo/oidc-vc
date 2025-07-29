@@ -37,7 +37,7 @@ type ValidateIdTokenParams = {
  * @property {JWTPayload} payload - The payload of the validated token.
  * @property {JWTHeaderParameters} protectedHeader - The protected header of the validated token.
  */
-type ValidateIdTokenResult = {
+export type ValidateIdTokenResult = {
   payload: JWTPayload;
   protectedHeader: JWTHeaderParameters;
 };
