@@ -1,5 +1,5 @@
 import { fetchOpenIdConfiguration } from '../../src/endpoints/openid-configuration';
-import { generateAuthorizationRequest } from '../../src/endpoints/authorization';
+import { prepareAuthorizationRequest } from '../../src/endpoints/authorization';
 import { verifyAuthorizationResponse } from '../../src/endpoints/authorization/verifyAuthorizationResponse';
 import { fetchToken } from '../../src/endpoints/token/fetchToken';
 import { validateIdToken } from '../../src/endpoints/token/validateIdToken';
@@ -7,6 +7,7 @@ import { validateTokenResponse } from '../../src/endpoints/token/validateTokenRe
 import { fetchJwks } from '../../src/endpoints/jwks/fetchJwks';
 import type { RandomBytes } from '../../src/types';
 import type { Jwk } from '../../src/endpoints/jwks/JwksResponse';
+import { adaptForLocalEnvironment } from '../../src/endpoints/openid-configuration/adaptForLocalEnvironment';
 
 /**
  * Fetches OpenID Configuration and displays the results
@@ -14,7 +15,8 @@ import type { Jwk } from '../../src/endpoints/jwks/JwksResponse';
 export const fetchAndDisplayOpenIdConfig = async (issuer: string) => {
   console.log(`\n📡 Fetching OpenID Configuration from: ${issuer}`);
 
-  const openIdConfig = await fetchOpenIdConfiguration(issuer);
+  const originalConfig = await fetchOpenIdConfiguration(issuer);
+  const openIdConfig = adaptForLocalEnvironment(originalConfig, issuer);
   console.log('✅ OpenID Configuration fetched successfully');
   console.log(
     `   Authorization Endpoint: ${openIdConfig.authorization_endpoint}`
@@ -26,11 +28,11 @@ export const fetchAndDisplayOpenIdConfig = async (issuer: string) => {
 };
 
 /**
- * Generates authorization request and displays the results
+ * Prepares authorization request and displays the results
  */
-export const generateAndDisplayAuthRequest = (
+export const prepareAndDisplayAuthRequest = (
   authParams: {
-    authorizationEndpoint: string;
+    endpoint: string;
     clientId: string;
     redirectUri: string;
     scope: string;
@@ -39,7 +41,7 @@ export const generateAndDisplayAuthRequest = (
   },
   randomBytes: RandomBytes
 ) => {
-  const authResult = generateAuthorizationRequest(authParams, randomBytes);
+  const authResult = prepareAuthorizationRequest(authParams, randomBytes);
 
   console.log('\n' + '='.repeat(80));
   console.log('Code Verifier:', authResult.codeVerifier);
@@ -147,6 +149,7 @@ export const validateTokenResponseWithJwks = async (params: {
     state: string;
   };
   openIdConfig: {
+    original_issuer?: string | null;
     issuer: string;
     jwks_uri?: string;
   };
@@ -168,7 +171,7 @@ export const validateTokenResponseWithJwks = async (params: {
     tokenResponse: params.tokenResponse,
     requestedScope: params.requestedScope,
     jwks,
-    issuer: params.openIdConfig.issuer,
+    issuer: params.openIdConfig.original_issuer ?? params.openIdConfig.issuer,
     audience: params.clientId,
     nonce: params.authResult.nonce!,
     state: params.authResult.state,

@@ -1,6 +1,6 @@
 import { TokenResponse, tokenResponseSchema } from './TokenResponse';
-import { buildBasicCredentials } from '../../utils/buildBasicCredentials';
-import { fetchJson } from '../../utils/fetchJson';
+import { fetchJson } from '@/utils/fetchJson';
+import { applyClientAuth } from '@/utils/applyClientAuth';
 
 /**
  * Parameters for the fetchToken function.
@@ -12,6 +12,10 @@ type FetchTokenParams = {
   clientId: string;
   /** The OAuth 2.0 client secret. If provided, will be used for Basic authentication */
   clientSecret?: string;
+  /** The client assertion type (optional) */
+  clientAssertionType?: string;
+  /** The client assertion (optional) */
+  clientAssertion?: string;
   /** The authorization code received from the authorization server */
   code: string;
   /** The PKCE code verifier that was used to generate the authorization request */
@@ -39,6 +43,8 @@ type FetchTokenParams = {
  * @param params.tokenEndpoint - The token endpoint URL where the request will be sent
  * @param params.clientId - The OAuth 2.0 client identifier
  * @param params.clientSecret - The OAuth 2.0 client secret (optional, used for Basic auth)
+ * @param params.clientAssertionType - The client assertion type (optional)
+ * @param params.clientAssertion - The client assertion (optional)
  * @param params.code - The authorization code received from the authorization server
  * @param params.codeVerifier - The PKCE code verifier used in the authorization request
  * @param params.redirectUri - The redirect URI that was used in the authorization request
@@ -70,6 +76,8 @@ export const fetchToken = async ({
   tokenEndpoint,
   clientId,
   clientSecret,
+  clientAssertionType,
+  clientAssertion,
   code,
   codeVerifier,
   redirectUri,
@@ -90,11 +98,12 @@ export const fetchToken = async ({
     'Content-Type': 'application/x-www-form-urlencoded',
   };
 
-  if (clientSecret == null) {
-    body.append('client_id', clientId);
-  } else {
-    headers.Authorization = buildBasicCredentials(clientId, clientSecret);
-  }
+  applyClientAuth(body, headers, {
+    clientId,
+    clientSecret,
+    clientAssertionType,
+    clientAssertion,
+  });
 
   // Make the request using fetchJson
   return fetchJson({

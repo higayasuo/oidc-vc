@@ -1,24 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { generateAuthorizationRequest } from '../generateAuthorizationRequest';
+import { prepareAuthorizationRequest } from '../prepareAuthorizationRequest';
 import type { RandomBytes } from '@/types';
 
-const issuer = process.env.ISSUER!;
+const issuer = process.env.TEST_ISSUER!;
 const clientId = process.env.CLIENT_ID!;
 const redirectUri = process.env.REDIRECT_URI!;
 
-describe('generateAuthorizationRequest', () => {
+describe('prepareAuthorizationRequest', () => {
   const mockRandomBytes: RandomBytes = (byteLength = 32) => {
     return new Uint8Array(byteLength).fill(255);
   };
 
   const baseConfig = {
-    authorizationEndpoint: `${issuer}/api/authorization`,
+    endpoint: `${issuer}/api/authorization`,
     clientId,
     redirectUri,
   };
 
   it('should generate basic authorization request URL with nonce for openid scope', () => {
-    const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+    const result = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
     expect(result.url.href).toContain(`${issuer}/api/authorization`);
     expect(result.url.searchParams.get('response_type')).toBe('code');
@@ -48,7 +48,7 @@ describe('generateAuthorizationRequest', () => {
 
   it('should generate nonce when scope includes openid among other scopes', () => {
     const config = { ...baseConfig, scope: 'openid email profile' };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('scope')).toBe('openid email profile');
     expect(result.url.searchParams.get('nonce')).toBeDefined();
@@ -60,7 +60,7 @@ describe('generateAuthorizationRequest', () => {
 
   it('should generate nonce when openid is not the first scope', () => {
     const config = { ...baseConfig, scope: 'email openid profile' };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('scope')).toBe('email openid profile');
     expect(result.url.searchParams.get('nonce')).toBeDefined();
@@ -71,7 +71,7 @@ describe('generateAuthorizationRequest', () => {
 
   it('should not generate nonce when scope does not contain openid', () => {
     const config = { ...baseConfig, scope: 'email profile address' };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('scope')).toBe('email profile address');
     expect(result.url.searchParams.get('nonce')).toBeNull();
@@ -87,11 +87,11 @@ describe('generateAuthorizationRequest', () => {
       return bytes;
     };
 
-    const result1 = generateAuthorizationRequest(
+    const result1 = prepareAuthorizationRequest(
       baseConfig,
       differentRandomBytes
     );
-    const result2 = generateAuthorizationRequest(
+    const result2 = prepareAuthorizationRequest(
       baseConfig,
       differentRandomBytes
     );
@@ -105,8 +105,8 @@ describe('generateAuthorizationRequest', () => {
   });
 
   it('should generate consistent nonce with same random function', () => {
-    const result1 = generateAuthorizationRequest(baseConfig, mockRandomBytes);
-    const result2 = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+    const result1 = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
+    const result2 = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
     expect(result1.nonce).toBe(result2.nonce);
     expect(result1.url.searchParams.get('nonce')).toBe(
@@ -119,7 +119,7 @@ describe('generateAuthorizationRequest', () => {
       ...baseConfig,
       scope: 'openid email profile',
     };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     const nonceParam = result.url.searchParams.get('nonce');
     expect(nonceParam).toBeDefined();
@@ -133,7 +133,7 @@ describe('generateAuthorizationRequest', () => {
 
   it('should use custom response type', () => {
     const config = { ...baseConfig, responseType: 'token' };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('response_type')).toBe('token');
     expect(result.nonce).toBeDefined(); // openid scope is default
@@ -149,7 +149,7 @@ describe('generateAuthorizationRequest', () => {
         include_granted_scopes: 'true',
       },
     };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('prompt')).toBe('consent');
     expect(result.url.searchParams.get('access_type')).toBe('offline');
@@ -159,8 +159,8 @@ describe('generateAuthorizationRequest', () => {
   });
 
   it('should generate consistent URLs with same input', () => {
-    const result1 = generateAuthorizationRequest(baseConfig, mockRandomBytes);
-    const result2 = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+    const result1 = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
+    const result2 = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
     expect(result1.url.href).toBe(result2.url.href);
     expect(result1.codeVerifier).toBe(result2.codeVerifier);
@@ -177,11 +177,11 @@ describe('generateAuthorizationRequest', () => {
       return bytes;
     };
 
-    const result1 = generateAuthorizationRequest(
+    const result1 = prepareAuthorizationRequest(
       baseConfig,
       differentRandomBytes
     );
-    const result2 = generateAuthorizationRequest(
+    const result2 = prepareAuthorizationRequest(
       baseConfig,
       differentRandomBytes
     );
@@ -200,7 +200,7 @@ describe('generateAuthorizationRequest', () => {
       redirectUri: 'https://myapp.com/callback?param=value&another=test',
       scope: 'openid email profile custom:scope',
     };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     expect(result.url.searchParams.get('redirect_uri')).toBe(
       'https://myapp.com/callback?param=value&another=test'
@@ -215,7 +215,7 @@ describe('generateAuthorizationRequest', () => {
 
   it('should handle empty additional parameters', () => {
     const config = { ...baseConfig, additionalParams: {} };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     // Should not contain any unexpected parameters
     const expectedParams = [
@@ -240,7 +240,7 @@ describe('generateAuthorizationRequest', () => {
       scope: 'email profile',
       additionalParams: {},
     };
-    const result = generateAuthorizationRequest(config, mockRandomBytes);
+    const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
     // Should not contain nonce parameter
     const expectedParams = [
@@ -265,56 +265,56 @@ describe('generateAuthorizationRequest', () => {
   describe('scope validation', () => {
     it('should handle single scope correctly', () => {
       const config = { ...baseConfig, scope: 'openid' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('openid');
     });
 
     it('should handle multiple scopes correctly', () => {
       const config = { ...baseConfig, scope: 'openid email profile address' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('openid email profile address');
     });
 
     it('should handle scopes with special characters', () => {
       const config = { ...baseConfig, scope: 'openid custom:scope api:read' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('openid custom:scope api:read');
     });
 
     it('should handle empty scope string', () => {
       const config = { ...baseConfig, scope: '' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('');
     });
 
     it('should handle scope with only whitespace', () => {
       const config = { ...baseConfig, scope: '   ' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('   ');
     });
 
     it('should handle scope with multiple spaces between scopes', () => {
       const config = { ...baseConfig, scope: 'openid  email   profile' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('openid  email   profile');
     });
 
     it('should handle scope with leading and trailing spaces', () => {
       const config = { ...baseConfig, scope: '  openid email profile  ' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('  openid email profile  ');
     });
 
     it('should handle scope with tabs and newlines', () => {
       const config = { ...baseConfig, scope: 'openid\temail\nprofile' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.scope).toBe('openid\temail\nprofile');
     });
@@ -322,7 +322,7 @@ describe('generateAuthorizationRequest', () => {
 
   describe('nonce validation', () => {
     it('should generate nonce with correct length', () => {
-      const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
       expect(result.nonce).toBeDefined();
       // Base64URL encoding of 32 bytes should be 43 characters
@@ -330,7 +330,7 @@ describe('generateAuthorizationRequest', () => {
     });
 
     it('should generate nonce with correct format', () => {
-      const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
       expect(result.nonce).toMatch(/^[A-Za-z0-9_-]+$/);
       // Should not contain any URL-unsafe characters
@@ -344,10 +344,7 @@ describe('generateAuthorizationRequest', () => {
         return new Uint8Array(byteLength).fill(128);
       };
 
-      const result = generateAuthorizationRequest(
-        baseConfig,
-        customRandomBytes
-      );
+      const result = prepareAuthorizationRequest(baseConfig, customRandomBytes);
 
       expect(result.nonce).toBeDefined();
       expect(result.nonce).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -356,7 +353,7 @@ describe('generateAuthorizationRequest', () => {
 
   describe('state validation', () => {
     it('should generate state with correct length', () => {
-      const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
       expect(result.state).toBeDefined();
       // Base64URL encoding of 32 bytes should be 43 characters
@@ -364,7 +361,7 @@ describe('generateAuthorizationRequest', () => {
     });
 
     it('should generate state with correct format', () => {
-      const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
       expect(result.state).toMatch(/^[A-Za-z0-9_-]+$/);
       // Should not contain any URL-unsafe characters
@@ -381,11 +378,11 @@ describe('generateAuthorizationRequest', () => {
         return bytes;
       };
 
-      const result1 = generateAuthorizationRequest(
+      const result1 = prepareAuthorizationRequest(
         baseConfig,
         differentRandomBytes
       );
-      const result2 = generateAuthorizationRequest(
+      const result2 = prepareAuthorizationRequest(
         baseConfig,
         differentRandomBytes
       );
@@ -399,8 +396,8 @@ describe('generateAuthorizationRequest', () => {
     });
 
     it('should generate consistent state with same random function', () => {
-      const result1 = generateAuthorizationRequest(baseConfig, mockRandomBytes);
-      const result2 = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result1 = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result2 = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
       expect(result1.state).toBe(result2.state);
       expect(result1.url.searchParams.get('state')).toBe(
@@ -409,7 +406,7 @@ describe('generateAuthorizationRequest', () => {
     });
 
     it('should properly encode state in URL parameters', () => {
-      const result = generateAuthorizationRequest(baseConfig, mockRandomBytes);
+      const result = prepareAuthorizationRequest(baseConfig, mockRandomBytes);
 
       const stateParam = result.url.searchParams.get('state');
       expect(stateParam).toBeDefined();
@@ -423,7 +420,7 @@ describe('generateAuthorizationRequest', () => {
 
     it('should generate state even when nonce is not generated', () => {
       const config = { ...baseConfig, scope: 'email profile' };
-      const result = generateAuthorizationRequest(config, mockRandomBytes);
+      const result = prepareAuthorizationRequest(config, mockRandomBytes);
 
       expect(result.state).toBeDefined();
       expect(result.url.searchParams.get('state')).toBeDefined();

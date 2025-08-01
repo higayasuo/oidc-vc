@@ -1,3 +1,3 @@
 // Authorization endpoints
-export * from './generateAuthorizationRequest';
+export * from './prepareAuthorizationRequest';
 export * from './verifyAuthorizationResponse';

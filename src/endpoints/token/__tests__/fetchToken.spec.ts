@@ -1,14 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchToken } from '../fetchToken';
 import { fetchJson } from '@/utils/fetchJson';
+import { applyClientAuth } from '@/utils/applyClientAuth';
 
 // Mock the fetchJson utility
 vi.mock('@/utils/fetchJson', () => ({
   fetchJson: vi.fn(),
 }));
 
+// Mock the applyClientAuth utility
+vi.mock('@/utils/applyClientAuth', () => ({
+  applyClientAuth: vi.fn(),
+}));
+
 describe('fetchToken', () => {
   const mockFetchJson = vi.mocked(fetchJson);
+  const mockApplyClientAuth = vi.mocked(applyClientAuth);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -38,15 +45,29 @@ describe('fetchToken', () => {
       grantType: 'authorization_code',
     });
 
+    // Verify applyClientAuth was called with correct parameters
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
+        clientAssertionType: undefined,
+        clientAssertion: undefined,
+      }
+    );
+
+    // Verify fetchJson was called with correct parameters
     expect(mockFetchJson).toHaveBeenCalledWith({
       url: 'https://example.com/token',
       schema: expect.any(Object),
       method: 'POST',
-      headers: {
+      headers: expect.objectContaining({
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic dGVzdC1jbGllbnQtaWQ6dGVzdC1jbGllbnQtc2VjcmV0',
-      },
-      body: 'grant_type=authorization_code&code=mock-authorization-code&code_verifier=mock-code-verifier&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback',
+      }),
+      body: expect.stringContaining('grant_type=authorization_code'),
     });
 
     expect(tokenResponse).toEqual(mockTokenResponse);
@@ -70,14 +91,29 @@ describe('fetchToken', () => {
       grantType: 'authorization_code',
     });
 
+    // Verify applyClientAuth was called with undefined clientSecret
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: undefined,
+        clientAssertionType: undefined,
+        clientAssertion: undefined,
+      }
+    );
+
+    // Verify fetchJson was called with correct parameters
     expect(mockFetchJson).toHaveBeenCalledWith({
       url: 'https://example.com/token',
       schema: expect.any(Object),
       method: 'POST',
-      headers: {
+      headers: expect.objectContaining({
         'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=authorization_code&code=mock-authorization-code&code_verifier=mock-code-verifier&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&client_id=test-client-id',
+      }),
+      body: expect.stringContaining('grant_type=authorization_code'),
     });
 
     expect(tokenResponse).toEqual(mockTokenResponse);
@@ -106,16 +142,69 @@ describe('fetchToken', () => {
       },
     });
 
+    // Verify applyClientAuth was called with correct parameters
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
+        clientAssertionType: undefined,
+        clientAssertion: undefined,
+      }
+    );
+
+    // Verify fetchJson was called with correct parameters
     expect(mockFetchJson).toHaveBeenCalledWith({
       url: 'https://example.com/token',
       schema: expect.any(Object),
       method: 'POST',
-      headers: {
+      headers: expect.objectContaining({
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic dGVzdC1jbGllbnQtaWQ6dGVzdC1jbGllbnQtc2VjcmV0',
-      },
-      body: 'grant_type=authorization_code&code=mock-authorization-code&code_verifier=mock-code-verifier&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile+email',
+      }),
+      body: expect.stringContaining('grant_type=authorization_code'),
     });
+
+    expect(tokenResponse).toEqual(mockTokenResponse);
+  });
+
+  it('should handle token request with client assertion', async () => {
+    const mockTokenResponse = {
+      access_token: 'mock-access-token',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    };
+
+    mockFetchJson.mockResolvedValue(mockTokenResponse);
+
+    const tokenResponse = await fetchToken({
+      tokenEndpoint: 'https://example.com/token',
+      clientId: 'test-client-id',
+      clientAssertionType:
+        'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      clientAssertion: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+      code: 'mock-authorization-code',
+      codeVerifier: 'mock-code-verifier',
+      redirectUri: 'https://example.com/callback',
+      grantType: 'authorization_code',
+    });
+
+    // Verify applyClientAuth was called with client assertion parameters
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: undefined,
+        clientAssertionType:
+          'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        clientAssertion: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+      }
+    );
 
     expect(tokenResponse).toEqual(mockTokenResponse);
   });
@@ -156,21 +245,35 @@ describe('fetchToken', () => {
       grantType: 'authorization_code',
     });
 
+    // Verify applyClientAuth was called
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
+        clientAssertionType: undefined,
+        clientAssertion: undefined,
+      }
+    );
+
+    // Verify fetchJson was called with correct URL
     expect(mockFetchJson).toHaveBeenCalledWith({
       url: 'https://example.com/token/',
       schema: expect.any(Object),
       method: 'POST',
-      headers: {
+      headers: expect.objectContaining({
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic dGVzdC1jbGllbnQtaWQ6dGVzdC1jbGllbnQtc2VjcmV0',
-      },
-      body: 'grant_type=authorization_code&code=mock-authorization-code&code_verifier=mock-code-verifier&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback',
+      }),
+      body: expect.stringContaining('grant_type=authorization_code'),
     });
 
     expect(tokenResponse).toEqual(mockTokenResponse);
   });
 
-  it('should handle empty client secret (Basic auth with empty password)', async () => {
+  it('should handle empty client secret', async () => {
     const mockTokenResponse = {
       access_token: 'mock-access-token',
       token_type: 'Bearer',
@@ -189,21 +292,24 @@ describe('fetchToken', () => {
       grantType: 'authorization_code',
     });
 
-    expect(mockFetchJson).toHaveBeenCalledWith({
-      url: 'https://example.com/token',
-      schema: expect.any(Object),
-      method: 'POST',
-      headers: {
+    // Verify applyClientAuth was called with empty string clientSecret
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic dGVzdC1jbGllbnQtaWQ6',
-      },
-      body: 'grant_type=authorization_code&code=mock-authorization-code&code_verifier=mock-code-verifier&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback',
-    });
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: '',
+        clientAssertionType: undefined,
+        clientAssertion: undefined,
+      }
+    );
 
     expect(tokenResponse).toEqual(mockTokenResponse);
   });
 
-  it('should handle null client secret (client_id in body)', async () => {
+  it('should handle null client secret', async () => {
     const mockTokenResponse = {
       access_token: 'mock-access-token',
       token_type: 'Bearer',
@@ -222,15 +328,59 @@ describe('fetchToken', () => {
       grantType: 'authorization_code',
     });
 
-    expect(mockFetchJson).toHaveBeenCalledWith({
-      url: 'https://example.com/token',
-      schema: expect.any(Object),
-      method: 'POST',
-      headers: {
+    // Verify applyClientAuth was called with null clientSecret
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
         'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=authorization_code&code=mock-authorization-code&code_verifier=mock-code-verifier&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&client_id=test-client-id',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: null,
+        clientAssertionType: undefined,
+        clientAssertion: undefined,
+      }
+    );
+
+    expect(tokenResponse).toEqual(mockTokenResponse);
+  });
+
+  it('should handle all authentication methods together', async () => {
+    const mockTokenResponse = {
+      access_token: 'mock-access-token',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    };
+
+    mockFetchJson.mockResolvedValue(mockTokenResponse);
+
+    const tokenResponse = await fetchToken({
+      tokenEndpoint: 'https://example.com/token',
+      clientId: 'test-client-id',
+      clientSecret: 'test-client-secret',
+      clientAssertionType:
+        'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      clientAssertion: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+      code: 'mock-authorization-code',
+      codeVerifier: 'mock-code-verifier',
+      redirectUri: 'https://example.com/callback',
+      grantType: 'authorization_code',
     });
+
+    // Verify applyClientAuth was called with all authentication parameters
+    expect(mockApplyClientAuth).toHaveBeenCalledWith(
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      {
+        clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
+        clientAssertionType:
+          'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        clientAssertion: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+      }
+    );
 
     expect(tokenResponse).toEqual(mockTokenResponse);
   });

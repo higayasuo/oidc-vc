@@ -1,5 +1,4 @@
 import { fetchJson } from '@/utils/fetchJson';
-import { validateIssuer } from '@/utils/validateIssuer';
 import {
   openIdConfigurationResponseSchema,
   OpenIdConfigurationResponse,
@@ -12,44 +11,6 @@ import { concatUrlPaths } from '@/utils/concatUrlPaths';
 export const OPENID_CONFIGURATION_PATH = '/.well-known/openid-configuration';
 
 /**
- * Modifies the OpenID Configuration response to use local endpoints if the environment is test or development.
- *
- * @param {OpenIdConfigurationResponse} response - The original OpenID Configuration response.
- * @param {string} issuer - The issuer URL to be used for local endpoints.
- * @returns {OpenIdConfigurationResponse} The modified OpenID Configuration response with local endpoints if applicable.
- */
-const modifyResponseIfEnvIsTestOrDev = (
-  response: OpenIdConfigurationResponse,
-  issuer: string
-): OpenIdConfigurationResponse => {
-  if (
-    process.env.NODE_ENV === 'test' ||
-    process.env.NODE_ENV === 'development'
-  ) {
-    const modifiedResponse: Record<string, string> = {};
-
-    Object.entries(response).forEach(([key, value]) => {
-      if (key.endsWith('_endpoint') || key.endsWith('_uri')) {
-        const url = new URL(value as string);
-        const localUrl = new URL(url.pathname + url.search, issuer);
-        modifiedResponse[key] = localUrl.toString();
-      } else if (key === 'issuer') {
-        modifiedResponse.issuer = issuer;
-        if (response.issuer !== issuer) {
-          modifiedResponse.original_issuer = response.issuer;
-        }
-      } else {
-        modifiedResponse[key] = value as string;
-      }
-    });
-
-    return modifiedResponse as OpenIdConfigurationResponse;
-  }
-
-  return response;
-};
-
-/**
  * Fetches the OpenID Configuration from the given issuer's well-known endpoint.
  *
  * @param {string} issuer - The issuer URL from which to fetch the OpenID Configuration.
@@ -59,19 +20,8 @@ const modifyResponseIfEnvIsTestOrDev = (
 export const fetchOpenIdConfiguration = async (
   issuer: string
 ): Promise<OpenIdConfigurationResponse> => {
-  const originalResponse = await fetchJson({
+  return fetchJson({
     url: concatUrlPaths(issuer, OPENID_CONFIGURATION_PATH),
     schema: openIdConfigurationResponseSchema,
   });
-
-  const response = modifyResponseIfEnvIsTestOrDev(originalResponse, issuer);
-
-  // Validate that the issuer in the response matches the requested issuer
-  // This is a security requirement from OpenID Connect Core 1.0 specification
-  validateIssuer({
-    receivedIssuer: response.issuer,
-    expectedIssuer: issuer,
-  });
-
-  return response;
 };

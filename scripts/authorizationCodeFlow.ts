@@ -23,7 +23,7 @@ import {
   question,
   rl,
   fetchAndDisplayOpenIdConfig,
-  generateAndDisplayAuthRequest,
+  prepareAndDisplayAuthRequest,
   verifyRedirectedUri,
   performTokenExchange,
   validateTokenResponseWithJwks,
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
     // Step 4: Generate authorization request
     const authParams = {
-      authorizationEndpoint: openIdConfig.authorization_endpoint,
+      endpoint: openIdConfig.authorization_endpoint,
       clientId,
       redirectUri,
       scope,
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
       additionalParams,
     };
 
-    const authResult = generateAndDisplayAuthRequest(authParams, randomBytes);
+    const authResult = prepareAndDisplayAuthRequest(authParams, randomBytes);
 
     // Step 5: Wait for manual authorization result
     const redirectedUri = await question('Enter the redirected URI: ');
